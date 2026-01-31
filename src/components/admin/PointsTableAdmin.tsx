@@ -1,0 +1,768 @@
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Plus, Trash2, Save, Edit, Users, Trophy, Shuffle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { useGameStore } from '@/store/gameStore';
+
+interface PointEntry {
+  id?: string;
+  team_id: string;
+  team_name: string;
+  group_name: string | null;
+  points: number;
+  kills: number;
+  wins: number;
+  position: number;
+  position_in_group: number | null;
+}
+
+const PointsTableAdmin = () => {
+  const { toast } = useToast();
+  const { tournaments } = useGameStore();
+  const [selectedTournament, setSelectedTournament] = useState<string>('');
+  const [groupMode, setGroupMode] = useState<'single' | 'multiple'>('single');
+  const [numberOfGroups, setNumberOfGroups] = useState<number>(2);
+  const [teamsPerGroup, setTeamsPerGroup] = useState<number>(4);
+  const [pointsEntries, setPointsEntries] = useState<PointEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<string | null>(null);
+
+  // New entry form
+  const [newEntry, setNewEntry] = useState<PointEntry>({
+    team_id: '',
+    team_name: '',
+    group_name: null,
+    points: 0,
+    kills: 0,
+    wins: 0,
+    position: 1,
+    position_in_group: null,
+  });
+
+  // Load existing points when tournament is selected
+  useEffect(() => {
+    if (selectedTournament) {
+      loadPointsTable();
+    }
+  }, [selectedTournament]);
+
+  const loadPointsTable = async () => {
+    if (!selectedTournament) return;
+    
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('tournament_points')
+        .select('*')
+        .eq('tournament_id', selectedTournament)
+        .order('position', { ascending: true });
+
+      if (error) throw error;
+      
+      setPointsEntries(data || []);
+      
+      // Detect group mode from existing data
+      const hasGroups = data?.some(entry => entry.group_name);
+      setGroupMode(hasGroups ? 'multiple' : 'single');
+    } catch (error: any) {
+      console.error('Error loading points:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load points table",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const calculatePositions = (entries: PointEntry[]): PointEntry[] => {
+    // Sort by points descending
+    const sorted = [...entries].sort((a, b) => b.points - a.points);
+    
+    if (groupMode === 'single') {
+      return sorted.map((entry, index) => ({
+        ...entry,
+        position: index + 1,
+        position_in_group: null,
+        group_name: null,
+      }));
+    } else {
+      // Calculate positions within each group
+      const groups = new Map<string, PointEntry[]>();
+      sorted.forEach(entry => {
+        const group = entry.group_name || 'A';
+        if (!groups.has(group)) groups.set(group, []);
+        groups.get(group)!.push(entry);
+      });
+
+      const result: PointEntry[] = [];
+      let globalPosition = 1;
+      
+      // Sort groups and assign positions
+      const allGrouped = Array.from(groups.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .flatMap(([groupName, groupEntries]) => {
+          return groupEntries
+            .sort((a, b) => b.points - a.points)
+            .map((entry, idx) => ({
+              ...entry,
+              group_name: groupName,
+              position_in_group: idx + 1,
+            }));
+        });
+
+      // Assign global positions based on points
+      allGrouped
+        .sort((a, b) => b.points - a.points)
+        .forEach((entry, idx) => {
+          result.push({ ...entry, position: idx + 1 });
+        });
+
+      return result;
+    }
+  };
+
+  const handleAddEntry = async () => {
+    if (!selectedTournament || !newEntry.team_name.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a tournament and enter team name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const teamId = crypto.randomUUID();
+      const entryToAdd = {
+        ...newEntry,
+        team_id: teamId,
+        tournament_id: selectedTournament,
+        group_name: groupMode === 'multiple' ? (newEntry.group_name || 'A') : null,
+        position_in_group: groupMode === 'multiple' ? 1 : null,
+      };
+
+      const { data, error } = await supabase
+        .from('tournament_points')
+        .insert(entryToAdd)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const updatedEntries = [...pointsEntries, data];
+      const recalculated = calculatePositions(updatedEntries);
+      
+      // Update all positions in database
+      await updateAllPositions(recalculated);
+      
+      setPointsEntries(recalculated);
+      setNewEntry({
+        team_id: '',
+        team_name: '',
+        group_name: groupMode === 'multiple' ? 'A' : null,
+        points: 0,
+        kills: 0,
+        wins: 0,
+        position: 1,
+        position_in_group: null,
+      });
+
+      toast({
+        title: "Success",
+        description: "Team added to points table",
+      });
+    } catch (error: any) {
+      console.error('Error adding entry:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add entry",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const updateAllPositions = async (entries: PointEntry[]) => {
+    for (const entry of entries) {
+      if (entry.id) {
+        await supabase
+          .from('tournament_points')
+          .update({
+            position: entry.position,
+            position_in_group: entry.position_in_group,
+            group_name: entry.group_name,
+          })
+          .eq('id', entry.id);
+      }
+    }
+  };
+
+  const handleUpdateEntry = async (entryId: string, updates: Partial<PointEntry>) => {
+    try {
+      const { error } = await supabase
+        .from('tournament_points')
+        .update(updates)
+        .eq('id', entryId);
+
+      if (error) throw error;
+
+      const updatedEntries = pointsEntries.map(e => 
+        e.id === entryId ? { ...e, ...updates } : e
+      );
+      
+      const recalculated = calculatePositions(updatedEntries);
+      await updateAllPositions(recalculated);
+      
+      setPointsEntries(recalculated);
+      setEditingEntry(null);
+
+      toast({
+        title: "Success",
+        description: "Entry updated",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update entry",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteEntry = async (entryId: string) => {
+    try {
+      const { error } = await supabase
+        .from('tournament_points')
+        .delete()
+        .eq('id', entryId);
+
+      if (error) throw error;
+
+      const remaining = pointsEntries.filter(e => e.id !== entryId);
+      const recalculated = calculatePositions(remaining);
+      await updateAllPositions(recalculated);
+      
+      setPointsEntries(recalculated);
+
+      toast({
+        title: "Success",
+        description: "Entry deleted",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete entry",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDistributeTeams = () => {
+    if (pointsEntries.length === 0) {
+      toast({
+        title: "No Teams",
+        description: "Add teams first before distributing",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const shuffled = [...pointsEntries].sort(() => Math.random() - 0.5);
+    const groups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].slice(0, numberOfGroups);
+    
+    const distributed = shuffled.map((entry, index) => ({
+      ...entry,
+      group_name: groups[index % numberOfGroups],
+    }));
+
+    const recalculated = calculatePositions(distributed);
+    setPointsEntries(recalculated);
+
+    toast({
+      title: "Teams Distributed",
+      description: `Teams distributed equally across ${numberOfGroups} groups`,
+    });
+  };
+
+  const handleSaveAllChanges = async () => {
+    try {
+      setLoading(true);
+      
+      for (const entry of pointsEntries) {
+        if (entry.id) {
+          await supabase
+            .from('tournament_points')
+            .update({
+              team_name: entry.team_name,
+              group_name: entry.group_name,
+              points: entry.points,
+              kills: entry.kills,
+              wins: entry.wins,
+              position: entry.position,
+              position_in_group: entry.position_in_group,
+            })
+            .eq('id', entry.id);
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: "All changes saved successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save changes",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Get unique groups from entries
+  const uniqueGroups = [...new Set(pointsEntries.map(e => e.group_name).filter(Boolean))].sort();
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-white">Points Table Management</h2>
+      </div>
+
+      {/* Tournament Selection */}
+      <Card className="bg-gray-800 border-gray-700">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <Trophy className="w-5 h-5" />
+            Select Tournament
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Select value={selectedTournament} onValueChange={setSelectedTournament}>
+            <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+              <SelectValue placeholder="Select a tournament" />
+            </SelectTrigger>
+            <SelectContent className="bg-gray-700 border-gray-600">
+              {tournaments.map((t) => (
+                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {selectedTournament && (
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Group Mode</label>
+                <Select value={groupMode} onValueChange={(v: 'single' | 'multiple') => setGroupMode(v)}>
+                  <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-700 border-gray-600">
+                    <SelectItem value="single">Single Group</SelectItem>
+                    <SelectItem value="multiple">Multiple Groups</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {groupMode === 'multiple' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Number of Groups</label>
+                    <Input
+                      type="number"
+                      min={2}
+                      max={8}
+                      value={numberOfGroups}
+                      onChange={(e) => setNumberOfGroups(parseInt(e.target.value) || 2)}
+                      className="bg-gray-700 border-gray-600 text-white"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      onClick={handleDistributeTeams}
+                      className="bg-blue-500 hover:bg-blue-600 w-full"
+                    >
+                      <Shuffle className="w-4 h-4 mr-2" />
+                      Auto Distribute Teams
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add New Team */}
+      {selectedTournament && (
+        <Card className="bg-gray-800 border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Add Team
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-6 gap-4 items-end">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Team Name</label>
+                <Input
+                  value={newEntry.team_name}
+                  onChange={(e) => setNewEntry({ ...newEntry, team_name: e.target.value })}
+                  placeholder="Enter team name"
+                  className="bg-gray-700 border-gray-600 text-white"
+                />
+              </div>
+              {groupMode === 'multiple' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Group</label>
+                  <Select 
+                    value={newEntry.group_name || 'A'} 
+                    onValueChange={(v) => setNewEntry({ ...newEntry, group_name: v })}
+                  >
+                    <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-700 border-gray-600">
+                      {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].slice(0, numberOfGroups).map(g => (
+                        <SelectItem key={g} value={g}>Group {g}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Points</label>
+                <Input
+                  type="number"
+                  value={newEntry.points}
+                  onChange={(e) => setNewEntry({ ...newEntry, points: parseInt(e.target.value) || 0 })}
+                  className="bg-gray-700 border-gray-600 text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Kills</label>
+                <Input
+                  type="number"
+                  value={newEntry.kills}
+                  onChange={(e) => setNewEntry({ ...newEntry, kills: parseInt(e.target.value) || 0 })}
+                  className="bg-gray-700 border-gray-600 text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Wins</label>
+                <Input
+                  type="number"
+                  value={newEntry.wins}
+                  onChange={(e) => setNewEntry({ ...newEntry, wins: parseInt(e.target.value) || 0 })}
+                  className="bg-gray-700 border-gray-600 text-white"
+                />
+              </div>
+              <Button onClick={handleAddEntry} className="bg-green-500 hover:bg-green-600">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Team
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Points Table */}
+      {selectedTournament && pointsEntries.length > 0 && (
+        <Card className="bg-gray-800 border-gray-700">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-white flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              Points Table ({pointsEntries.length} Teams)
+            </CardTitle>
+            <Button onClick={handleSaveAllChanges} disabled={loading} className="bg-purple-500 hover:bg-purple-600">
+              <Save className="w-4 h-4 mr-2" />
+              Save All Changes
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {groupMode === 'multiple' && uniqueGroups.length > 0 ? (
+              // Multiple groups - show separate tables
+              <div className="space-y-6">
+                {uniqueGroups.map(group => (
+                  <div key={group} className="space-y-2">
+                    <h3 className="text-lg font-semibold text-purple-400">Group {group}</h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-gray-700">
+                          <TableHead className="text-gray-300">#</TableHead>
+                          <TableHead className="text-gray-300">Team Name</TableHead>
+                          <TableHead className="text-gray-300">Points</TableHead>
+                          <TableHead className="text-gray-300">Kills</TableHead>
+                          <TableHead className="text-gray-300">Wins</TableHead>
+                          <TableHead className="text-gray-300">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pointsEntries
+                          .filter(e => e.group_name === group)
+                          .sort((a, b) => (a.position_in_group || 0) - (b.position_in_group || 0))
+                          .map((entry) => (
+                            <TableRow key={entry.id} className="border-gray-700">
+                              <TableCell className="text-white font-bold">{entry.position_in_group}</TableCell>
+                              <TableCell>
+                                {editingEntry === entry.id ? (
+                                  <Input
+                                    value={entry.team_name}
+                                    onChange={(e) => {
+                                      setPointsEntries(prev => prev.map(p => 
+                                        p.id === entry.id ? { ...p, team_name: e.target.value } : p
+                                      ));
+                                    }}
+                                    className="bg-gray-700 border-gray-600 text-white"
+                                  />
+                                ) : (
+                                  <span className="text-white">{entry.team_name}</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {editingEntry === entry.id ? (
+                                  <Input
+                                    type="number"
+                                    value={entry.points}
+                                    onChange={(e) => {
+                                      setPointsEntries(prev => prev.map(p => 
+                                        p.id === entry.id ? { ...p, points: parseInt(e.target.value) || 0 } : p
+                                      ));
+                                    }}
+                                    className="bg-gray-700 border-gray-600 text-white w-20"
+                                  />
+                                ) : (
+                                  <span className="text-green-400 font-semibold">{entry.points}</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {editingEntry === entry.id ? (
+                                  <Input
+                                    type="number"
+                                    value={entry.kills}
+                                    onChange={(e) => {
+                                      setPointsEntries(prev => prev.map(p => 
+                                        p.id === entry.id ? { ...p, kills: parseInt(e.target.value) || 0 } : p
+                                      ));
+                                    }}
+                                    className="bg-gray-700 border-gray-600 text-white w-20"
+                                  />
+                                ) : (
+                                  <span className="text-red-400">{entry.kills}</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {editingEntry === entry.id ? (
+                                  <Input
+                                    type="number"
+                                    value={entry.wins}
+                                    onChange={(e) => {
+                                      setPointsEntries(prev => prev.map(p => 
+                                        p.id === entry.id ? { ...p, wins: parseInt(e.target.value) || 0 } : p
+                                      ));
+                                    }}
+                                    className="bg-gray-700 border-gray-600 text-white w-20"
+                                  />
+                                ) : (
+                                  <span className="text-yellow-400">{entry.wins}</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  {editingEntry === entry.id ? (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleUpdateEntry(entry.id!, {
+                                        team_name: entry.team_name,
+                                        points: entry.points,
+                                        kills: entry.kills,
+                                        wins: entry.wins,
+                                      })}
+                                      className="bg-green-500 hover:bg-green-600"
+                                    >
+                                      <Save className="w-4 h-4" />
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => setEditingEntry(entry.id!)}
+                                      className="bg-blue-500 hover:bg-blue-600"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleDeleteEntry(entry.id!)}
+                                    className="bg-red-500 hover:bg-red-600"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                  {groupMode === 'multiple' && (
+                                    <Select
+                                      value={entry.group_name || 'A'}
+                                      onValueChange={(v) => handleUpdateEntry(entry.id!, { group_name: v })}
+                                    >
+                                      <SelectTrigger className="bg-gray-700 border-gray-600 text-white w-24">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-gray-700 border-gray-600">
+                                        {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].slice(0, numberOfGroups).map(g => (
+                                          <SelectItem key={g} value={g}>Group {g}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              // Single group - show one table
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-gray-700">
+                    <TableHead className="text-gray-300">Position</TableHead>
+                    <TableHead className="text-gray-300">Team Name</TableHead>
+                    <TableHead className="text-gray-300">Points</TableHead>
+                    <TableHead className="text-gray-300">Kills</TableHead>
+                    <TableHead className="text-gray-300">Wins</TableHead>
+                    <TableHead className="text-gray-300">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pointsEntries
+                    .sort((a, b) => a.position - b.position)
+                    .map((entry) => (
+                      <TableRow key={entry.id} className="border-gray-700">
+                        <TableCell className="text-white font-bold">#{entry.position}</TableCell>
+                        <TableCell>
+                          {editingEntry === entry.id ? (
+                            <Input
+                              value={entry.team_name}
+                              onChange={(e) => {
+                                setPointsEntries(prev => prev.map(p => 
+                                  p.id === entry.id ? { ...p, team_name: e.target.value } : p
+                                ));
+                              }}
+                              className="bg-gray-700 border-gray-600 text-white"
+                            />
+                          ) : (
+                            <span className="text-white">{entry.team_name}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {editingEntry === entry.id ? (
+                            <Input
+                              type="number"
+                              value={entry.points}
+                              onChange={(e) => {
+                                setPointsEntries(prev => prev.map(p => 
+                                  p.id === entry.id ? { ...p, points: parseInt(e.target.value) || 0 } : p
+                                ));
+                              }}
+                              className="bg-gray-700 border-gray-600 text-white w-20"
+                            />
+                          ) : (
+                            <span className="text-green-400 font-semibold">{entry.points}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {editingEntry === entry.id ? (
+                            <Input
+                              type="number"
+                              value={entry.kills}
+                              onChange={(e) => {
+                                setPointsEntries(prev => prev.map(p => 
+                                  p.id === entry.id ? { ...p, kills: parseInt(e.target.value) || 0 } : p
+                                ));
+                              }}
+                              className="bg-gray-700 border-gray-600 text-white w-20"
+                            />
+                          ) : (
+                            <span className="text-red-400">{entry.kills}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {editingEntry === entry.id ? (
+                            <Input
+                              type="number"
+                              value={entry.wins}
+                              onChange={(e) => {
+                                setPointsEntries(prev => prev.map(p => 
+                                  p.id === entry.id ? { ...p, wins: parseInt(e.target.value) || 0 } : p
+                                ));
+                              }}
+                              className="bg-gray-700 border-gray-600 text-white w-20"
+                            />
+                          ) : (
+                            <span className="text-yellow-400">{entry.wins}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            {editingEntry === entry.id ? (
+                              <Button
+                                size="sm"
+                                onClick={() => handleUpdateEntry(entry.id!, {
+                                  team_name: entry.team_name,
+                                  points: entry.points,
+                                  kills: entry.kills,
+                                  wins: entry.wins,
+                                })}
+                                className="bg-green-500 hover:bg-green-600"
+                              >
+                                <Save className="w-4 h-4" />
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                onClick={() => setEditingEntry(entry.id!)}
+                                className="bg-blue-500 hover:bg-blue-600"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              onClick={() => handleDeleteEntry(entry.id!)}
+                              className="bg-red-500 hover:bg-red-600"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {selectedTournament && pointsEntries.length === 0 && !loading && (
+        <Card className="bg-gray-800 border-gray-700">
+          <CardContent className="py-8 text-center">
+            <Users className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+            <p className="text-gray-400">No teams in points table yet. Add teams above.</p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+export default PointsTableAdmin;
