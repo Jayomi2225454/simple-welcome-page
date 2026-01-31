@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, Save, Edit, Users, Trophy, Shuffle } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Trash2, Save, Edit, Users, Trophy, Shuffle, Upload, Camera, Loader2, Check, X, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useGameStore } from '@/store/gameStore';
-
 interface PointEntry {
   id?: string;
   team_id: string;
@@ -21,6 +23,25 @@ interface PointEntry {
   position_in_group: number | null;
 }
 
+interface OCRMatchedTeam {
+  teamId: string;
+  teamName: string;
+  playerName: string;
+  matchedPlayerName: string;
+  kills: number;
+  points: number;
+  position: number;
+  confidence: number;
+  selected: boolean;
+}
+
+interface OCRUnmatchedPlayer {
+  playerName: string;
+  kills?: number;
+  points?: number;
+  position?: number;
+}
+
 const PointsTableAdmin = () => {
   const { toast } = useToast();
   const { tournaments } = useGameStore();
@@ -31,6 +52,15 @@ const PointsTableAdmin = () => {
   const [pointsEntries, setPointsEntries] = useState<PointEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingEntry, setEditingEntry] = useState<string | null>(null);
+
+  // OCR states
+  const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrImagePreview, setOcrImagePreview] = useState<string | null>(null);
+  const [ocrMatchedTeams, setOcrMatchedTeams] = useState<OCRMatchedTeam[]>([]);
+  const [ocrUnmatchedPlayers, setOcrUnmatchedPlayers] = useState<OCRUnmatchedPlayer[]>([]);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const ocrFileInputRef = useRef<HTMLInputElement>(null);
 
   // New entry form
   const [newEntry, setNewEntry] = useState<PointEntry>({
@@ -329,6 +359,191 @@ const PointsTableAdmin = () => {
   // Get unique groups from entries
   const uniqueGroups = [...new Set(pointsEntries.map(e => e.group_name).filter(Boolean))].sort();
 
+  // OCR Functions
+  const handleOCRFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid File",
+        description: "Please select an image file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "Please select an image under 10MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setOcrImagePreview(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    // Convert to base64 and process
+    await processOCRImage(file);
+  };
+
+  const processOCRImage = async (file: File) => {
+    setOcrLoading(true);
+    setOcrError(null);
+    setOcrMatchedTeams([]);
+    setOcrUnmatchedPlayers([]);
+
+    try {
+      // Convert file to base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Remove data URL prefix
+          const base64Data = result.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Call the OCR edge function
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-points-extract`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            imageBase64: base64,
+            tournamentId: selectedTournament,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'OCR processing failed');
+      }
+
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // Set matched teams with selection state
+      setOcrMatchedTeams(
+        (data.matchedTeams || []).map((team: OCRMatchedTeam) => ({
+          ...team,
+          selected: true,
+        }))
+      );
+      setOcrUnmatchedPlayers(data.unmatchedPlayers || []);
+
+      if (data.matchedTeams?.length === 0 && data.unmatchedPlayers?.length === 0) {
+        setOcrError('No player data could be extracted from the image. Please try a clearer screenshot.');
+      } else {
+        setOcrDialogOpen(true);
+      }
+
+      toast({
+        title: "OCR Complete",
+        description: `Found ${data.matchedTeams?.length || 0} matched teams, ${data.unmatchedPlayers?.length || 0} unmatched players`,
+      });
+    } catch (error: any) {
+      console.error('OCR error:', error);
+      setOcrError(error.message || 'Failed to process image');
+      toast({
+        title: "OCR Failed",
+        description: error.message || "Failed to extract data from image",
+        variant: "destructive",
+      });
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const toggleOCRTeamSelection = (teamId: string) => {
+    setOcrMatchedTeams(prev =>
+      prev.map(team =>
+        team.teamId === teamId ? { ...team, selected: !team.selected } : team
+      )
+    );
+  };
+
+  const applyOCRPoints = async () => {
+    const selectedTeams = ocrMatchedTeams.filter(t => t.selected);
+    
+    if (selectedTeams.length === 0) {
+      toast({
+        title: "No Teams Selected",
+        description: "Please select at least one team to update",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      for (const team of selectedTeams) {
+        // Find the existing entry and update it
+        const existingEntry = pointsEntries.find(e => e.id === team.teamId);
+        
+        if (existingEntry) {
+          // Add the OCR points/kills to existing values
+          const newPoints = existingEntry.points + team.points;
+          const newKills = existingEntry.kills + team.kills;
+          
+          await supabase
+            .from('tournament_points')
+            .update({
+              points: newPoints,
+              kills: newKills,
+            })
+            .eq('id', team.teamId);
+        }
+      }
+
+      // Reload the points table
+      await loadPointsTable();
+
+      toast({
+        title: "Points Updated",
+        description: `Updated points for ${selectedTeams.length} teams`,
+      });
+
+      // Close dialog and reset state
+      setOcrDialogOpen(false);
+      setOcrImagePreview(null);
+      setOcrMatchedTeams([]);
+      setOcrUnmatchedPlayers([]);
+      
+      // Reset file input
+      if (ocrFileInputRef.current) {
+        ocrFileInputRef.current.value = '';
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update points",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -468,6 +683,80 @@ const PointsTableAdmin = () => {
                 <Plus className="w-4 h-4 mr-2" />
                 Add Team
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* OCR Screenshot Upload */}
+      {selectedTournament && pointsEntries.length > 0 && (
+        <Card className="bg-gradient-to-r from-purple-900/50 to-blue-900/50 border-purple-500/30">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Camera className="w-5 h-5" />
+              Auto-Add Points from Screenshot (OCR)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <p className="text-gray-300 text-sm">
+                Upload a game results screenshot and the AI will automatically extract player names and points, 
+                then match them with your existing teams.
+              </p>
+              
+              <div className="flex items-center gap-4">
+                <input
+                  ref={ocrFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleOCRFileSelect}
+                  className="hidden"
+                  id="ocr-file-input"
+                />
+                <Button
+                  onClick={() => ocrFileInputRef.current?.click()}
+                  disabled={ocrLoading}
+                  className="bg-purple-500 hover:bg-purple-600"
+                >
+                  {ocrLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Upload Screenshot
+                    </>
+                  )}
+                </Button>
+                
+                {ocrImagePreview && !ocrLoading && (
+                  <div className="relative">
+                    <img 
+                      src={ocrImagePreview} 
+                      alt="OCR Preview" 
+                      className="h-16 w-auto rounded border border-gray-600"
+                    />
+                    <button
+                      onClick={() => {
+                        setOcrImagePreview(null);
+                        if (ocrFileInputRef.current) ocrFileInputRef.current.value = '';
+                      }}
+                      className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1"
+                    >
+                      <X className="w-3 h-3 text-white" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {ocrError && (
+                <div className="flex items-center gap-2 text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  {ocrError}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -761,6 +1050,127 @@ const PointsTableAdmin = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* OCR Results Dialog */}
+      <Dialog open={ocrDialogOpen} onOpenChange={setOcrDialogOpen}>
+        <DialogContent className="bg-gray-800 border-gray-700 max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Camera className="w-5 h-5" />
+              OCR Results - Match Players to Teams
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Matched Teams */}
+            {ocrMatchedTeams.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-green-400 font-semibold flex items-center gap-2">
+                  <Check className="w-4 h-4" />
+                  Matched Teams ({ocrMatchedTeams.length})
+                </h3>
+                <p className="text-gray-400 text-sm">
+                  Select which teams should have their points updated. Points and kills will be added to existing values.
+                </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-700">
+                      <TableHead className="text-gray-300 w-12">Select</TableHead>
+                      <TableHead className="text-gray-300">Team Name</TableHead>
+                      <TableHead className="text-gray-300">Extracted Player</TableHead>
+                      <TableHead className="text-gray-300">Points</TableHead>
+                      <TableHead className="text-gray-300">Kills</TableHead>
+                      <TableHead className="text-gray-300">Confidence</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ocrMatchedTeams.map((team) => (
+                      <TableRow key={team.teamId} className="border-gray-700">
+                        <TableCell>
+                          <Checkbox
+                            checked={team.selected}
+                            onCheckedChange={() => toggleOCRTeamSelection(team.teamId)}
+                          />
+                        </TableCell>
+                        <TableCell className="text-white font-medium">{team.teamName}</TableCell>
+                        <TableCell className="text-gray-300">{team.playerName}</TableCell>
+                        <TableCell className="text-green-400 font-semibold">+{team.points}</TableCell>
+                        <TableCell className="text-red-400">+{team.kills}</TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={team.confidence >= 0.8 ? "default" : "secondary"}
+                            className={team.confidence >= 0.8 ? "bg-green-500" : "bg-yellow-500"}
+                          >
+                            {Math.round(team.confidence * 100)}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {/* Unmatched Players */}
+            {ocrUnmatchedPlayers.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-yellow-400 font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  Unmatched Players ({ocrUnmatchedPlayers.length})
+                </h3>
+                <p className="text-gray-400 text-sm">
+                  These players couldn't be matched to any existing team. You may need to add them manually.
+                </p>
+                <div className="bg-gray-700/50 rounded-lg p-4 space-y-2">
+                  {ocrUnmatchedPlayers.map((player, index) => (
+                    <div key={index} className="flex items-center justify-between text-sm">
+                      <span className="text-white">{player.playerName}</span>
+                      <div className="flex gap-4 text-gray-400">
+                        <span>Points: {player.points || 0}</span>
+                        <span>Kills: {player.kills || 0}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {ocrMatchedTeams.length === 0 && ocrUnmatchedPlayers.length === 0 && (
+              <div className="text-center py-8 text-gray-400">
+                <AlertCircle className="w-12 h-12 mx-auto mb-4" />
+                <p>No data could be extracted from the image.</p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setOcrDialogOpen(false)}
+              className="border-gray-600 text-gray-300"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={applyOCRPoints}
+              disabled={loading || ocrMatchedTeams.filter(t => t.selected).length === 0}
+              className="bg-green-500 hover:bg-green-600"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Applying...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  Apply Points ({ocrMatchedTeams.filter(t => t.selected).length} teams)
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
