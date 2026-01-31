@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Dark esports theme - matching gray-900/gray-800 palette */
+    --background: 220 26% 11%;
+    --foreground: 210 40% 98%;
+
+    --card: 220 24% 16%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 220 24% 16%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 263 70% 58%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 220 20% 22%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 220 20% 22%;
+    --muted-foreground: 215 16% 57%;
+
+    --accent: 217 91% 60%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 20% 26%;
+    --input: 220 20% 26%;
+    --ring: 263 70% 58%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 220 26% 11%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 263 70% 58%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 220 20% 22%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 220 20% 26%;
+    --sidebar-ring: 263 70% 58%;
+
+    /* Mode-specific brand colors */
+    --brand-primary: 263 70% 58%;
+    --brand-secondary: 217 91% 60%;
+    --brand-gradient-from: 263 70% 58%;
+    --brand-gradient-to: 217 91% 60%;
+  }
+
+  /* Esports Mode Theme (Purple/Blue) */
+  .esports-mode {
+    --brand-primary: 263 70% 58%;
+    --brand-secondary: 217 91% 60%;
+    --brand-gradient-from: 263 70% 58%;
+    --brand-gradient-to: 217 91% 60%;
+    --primary: 263 70% 58%;
+    --accent: 217 91% 60%;
+    --ring: 263 70% 58%;
+  }
+
+  /* Sports Mode Theme (Emerald/Teal - Neon Green) */
+  .sports-mode {
+    --brand-primary: 160 84% 39%;
+    --brand-secondary: 174 72% 40%;
+    --brand-gradient-from: 160 84% 39%;
+    --brand-gradient-to: 174 72% 40%;
+    --primary: 160 84% 39%;
+    --accent: 174 72% 40%;
+    --ring: 160 84% 39%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Brand gradient utility classes */
+@layer utilities {
+  .brand-gradient {
+    background: linear-gradient(to right, hsl(var(--brand-gradient-from)), hsl(var(--brand-gradient-to)));
+  }
+  
+  .brand-gradient-text {
+    background: linear-gradient(to right, hsl(var(--brand-gradient-from)), hsl(var(--brand-gradient-to)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .brand-border {
+    border-color: hsl(var(--brand-primary) / 0.5);
+  }
+
+  .brand-text {
+    color: hsl(var(--brand-primary));
+  }
+}
