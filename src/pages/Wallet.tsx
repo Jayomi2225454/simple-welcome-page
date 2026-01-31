@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, forwardRef } from 'react';
 import { Plus, Minus, DollarSign, TrendingUp, TrendingDown, Clock, CheckCircle, XCircle, History, CreditCard, X, QrCode, User, Phone, FileText, Ticket, Eye, ChevronLeft, ChevronRight, Loader2, Upload, Image } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,7 @@ interface WalletQRCode {
   mode: string;
 }
 
-const Wallet = () => {
+const Wallet = forwardRef<HTMLDivElement>((_, ref) => {
   const { user } = useAuth();
   const { mode } = useMode();
   const { toast } = useToast();
@@ -1141,6 +1141,8 @@ const Wallet = () => {
       </Dialog>
     </Layout>
   );
-};
+});
+
+Wallet.displayName = 'Wallet';
 
 export default Wallet;
