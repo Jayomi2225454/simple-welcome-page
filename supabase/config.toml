@@ -1,1 +1,4 @@
 project_id = "xoxpmzsdiodfapqfdxjv"
+
+[functions.ocr-points-extract]
+verify_jwt = false
