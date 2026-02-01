@@ -27,12 +27,33 @@ interface PendingRegistration {
   };
 }
 
+interface UsageInfo {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedCost: string;
+  responseTimeMs: number;
+}
+
+interface CostInfo {
+  model: string;
+  modelDisplayName: string;
+  costPer1kTokens: {
+    input: string;
+    output: string;
+  };
+  note: string;
+  freeIncluded: string;
+}
+
 export const useAIAssistant = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState<AIAction | null>(null);
   const [pendingRegistration, setPendingRegistration] = useState<PendingRegistration | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [lastUsage, setLastUsage] = useState<UsageInfo | null>(null);
+  const [costInfo, setCostInfo] = useState<CostInfo | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -93,15 +114,14 @@ export const useAIAssistant = () => {
       if (data.success) {
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: `✅ ${data.message}\n\n📋 Details:\n• Tournament: ${data.details.tournamentName}\n• Player: ${data.details.playerName}\n• Game ID: ${data.details.gameId}\n• Game: ${data.details.game}`
+          content: `✅ ${data.message}\n\n📋 **Registration Details:**\n- **Tournament:** ${data.details.tournamentName}\n- **Player:** ${data.details.playerName}\n- **Game ID:** ${data.details.gameId}\n- **Game:** ${data.details.game}\n- **Entry Fee:** ${data.details.entryFee}`
         }]);
         toast.success(data.message);
       } else if (data.requiresPayment) {
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: `💰 ${data.message}`
+          content: `💰 ${data.message}\n\nWould you like me to take you to the wallet to add funds?`
         }]);
-        // Navigate to tournament for payment
         navigate(`/tournaments/${data.tournamentId}`);
         toast.info('Redirecting to complete payment...');
       } else {
@@ -143,6 +163,16 @@ export const useAIAssistant = () => {
       });
 
       if (error) throw error;
+
+      // Update usage info
+      if (data.usage) {
+        setLastUsage(data.usage);
+      }
+
+      // Update cost info
+      if (data.costInfo) {
+        setCostInfo(data.costInfo);
+      }
 
       const assistantMessage: Message = {
         role: 'assistant',
@@ -197,7 +227,7 @@ export const useAIAssistant = () => {
     setPendingRegistration(null);
     setMessages(prev => [...prev, {
       role: 'assistant',
-      content: 'Action cancelled. How else can I help you?'
+      content: 'Action cancelled. How else can I help you? 🎮'
     }]);
   }, []);
 
@@ -205,6 +235,7 @@ export const useAIAssistant = () => {
     setMessages([]);
     setPendingAction(null);
     setPendingRegistration(null);
+    setLastUsage(null);
   }, []);
 
   return {
@@ -217,6 +248,8 @@ export const useAIAssistant = () => {
     confirmAction,
     confirmRegistration,
     cancelAction,
-    clearMessages
+    clearMessages,
+    lastUsage,
+    costInfo
   };
 };
