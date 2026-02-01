@@ -71,9 +71,11 @@ const Welcome = () => {
       }`}>
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
-              <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-            </div>
+            <img 
+              src="/lovable-uploads/2aa9115f-ce05-4d8a-bab3-2cf4f362ef5e.png" 
+              alt="Battle Mitra Logo" 
+              className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
+            />
             <span className="text-xl sm:text-2xl font-bold text-white">Battle Mitra</span>
           </div>
           <Link 
