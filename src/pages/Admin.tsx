@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Save, X, Users, Trophy, Play, Image, Loader2, Lock, ShieldX, TableIcon, Ticket, QrCode, ClipboardList } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, Users, Trophy, Play, Image, Loader2, Lock, ShieldX, TableIcon, Ticket, QrCode, ClipboardList, Bot, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,7 @@ import AdminRolesManager from '@/components/admin/AdminRolesManager';
 import PointsTableAdmin from '@/components/admin/PointsTableAdmin';
 import BattleCodeAdmin from '@/components/admin/BattleCodeAdmin';
 import TournamentRegistrationsAdmin from '@/components/admin/TournamentRegistrationsAdmin';
+import AISettingsAdmin from '@/components/admin/AISettingsAdmin';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
@@ -533,7 +534,7 @@ const Admin = () => {
         </div>
 
         <Tabs defaultValue="tournaments" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 lg:grid-cols-13 bg-gray-800 h-auto flex-wrap">
+          <TabsList className="grid w-full grid-cols-6 lg:grid-cols-14 bg-gray-800 h-auto flex-wrap">
             <TabsTrigger value="tournaments" className="data-[state=active]:bg-purple-500">
               <Trophy className="w-4 h-4 mr-2" />
               Tournaments
@@ -585,6 +586,10 @@ const Admin = () => {
             <TabsTrigger value="admins" className="data-[state=active]:bg-purple-500">
               <Users className="w-4 h-4 mr-2" />
               Admins
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="data-[state=active]:bg-purple-500">
+              <Settings className="w-4 h-4 mr-2" />
+              Settings
             </TabsTrigger>
           </TabsList>
 
@@ -1423,6 +1428,11 @@ const Admin = () => {
           {/* Admin Roles Tab */}
           <TabsContent value="admins">
             <AdminRolesManager />
+          </TabsContent>
+
+          {/* Settings Tab */}
+          <TabsContent value="settings" className="space-y-6">
+            <AISettingsAdmin />
           </TabsContent>
         </Tabs>
       </div>
