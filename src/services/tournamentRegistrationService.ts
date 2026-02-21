@@ -62,6 +62,30 @@ export const tournamentRegistrationService = {
     return data as TournamentRegistration;
   },
 
+  async registerForTournamentWithWallet(registration: TournamentRegistrationInput): Promise<TournamentRegistration> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const { data, error } = await supabase
+      .from('tournament_registrations')
+      .insert([{
+        tournament_id: registration.tournament_id,
+        player_name: registration.player_name,
+        game_id: registration.game_id,
+        payment_amount: registration.payment_amount,
+        payment_screenshot_url: null,
+        custom_fields_data: registration.custom_fields_data as unknown as Json,
+        user_id: user.id,
+        payment_status: 'completed',
+        status: 'confirmed'
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as TournamentRegistration;
+  },
+
   async getUserRegistrations(userId: string): Promise<TournamentRegistration[]> {
     const { data, error } = await supabase
       .from('tournament_registrations')
