@@ -36,7 +36,7 @@ interface WalletQRCode {
 interface RegistrationFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: { gameId: string; customFields: Record<string, string>; screenshotUrl?: string }) => void;
+  onSubmit: (data: { gameId: string; customFields: Record<string, string>; screenshotUrl?: string; paidViaWallet?: boolean }) => void;
   isLoading?: boolean;
   tournamentId: string;
   isPaid: boolean;
@@ -68,14 +68,41 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
   const [currentQRIndex, setCurrentQRIndex] = useState(0);
   const [loadingQRCodes, setLoadingQRCodes] = useState(false);
 
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [loadingWallet, setLoadingWallet] = useState(false);
+  const [payViaWallet, setPayViaWallet] = useState(false);
+  const hasEnoughBalance = walletBalance >= entryFee;
+
   useEffect(() => {
     if (open) {
       loadCustomFields();
       if (isPaid) {
         loadQRCodes();
+        loadWalletBalance();
       }
     }
   }, [open, tournamentId, isPaid]);
+
+  const loadWalletBalance = async () => {
+    setLoadingWallet(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('wallet_balances')
+        .select('available_balance')
+        .eq('user_id', user.id)
+        .eq('mode', walletMode)
+        .maybeSingle();
+      const bal = data?.available_balance ?? 0;
+      setWalletBalance(bal);
+      setPayViaWallet(bal >= entryFee);
+    } catch (e) {
+      console.error('Error loading wallet balance:', e);
+    } finally {
+      setLoadingWallet(false);
+    }
+  };
 
   const loadCustomFields = async () => {
     setLoadingFields(true);
@@ -183,12 +210,13 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
     for (const field of customFields) {
       if (field.is_required && !customFieldValues[field.field_name]?.trim()) return;
     }
-    if (isPaid && !screenshot) return;
+    // If paid and NOT paying via wallet, require screenshot
+    if (isPaid && !payViaWallet && !screenshot) return;
 
     let screenshotUrl: string | undefined;
     if (screenshot) screenshotUrl = await uploadScreenshot();
 
-    onSubmit({ gameId: gameId.trim(), customFields: customFieldValues, screenshotUrl });
+    onSubmit({ gameId: gameId.trim(), customFields: customFieldValues, screenshotUrl, paidViaWallet: payViaWallet });
     setGameId('');
     setCustomFieldValues({});
     setScreenshot(null);
@@ -247,7 +275,8 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
     for (const field of customFields) {
       if (field.is_required && !customFieldValues[field.field_name]?.trim()) return false;
     }
-    if (isPaid && !screenshot) return false;
+    // If paid and not paying via wallet, require screenshot
+    if (isPaid && !payViaWallet && !screenshot) return false;
     return true;
   };
 
@@ -346,103 +375,146 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
                     <div className="h-px flex-1 bg-amber-500/20" />
                   </div>
 
-                  {/* Payment Instructions */}
-                  <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl space-y-2">
-                    <p className="text-sm font-semibold text-blue-300">How to pay:</p>
-                    <ol className="text-xs text-blue-200/80 space-y-2">
-                      {['Scan the QR code using any UPI app', `Pay exactly ₹${entryFee}`, 'Take a screenshot of success', 'Upload it below'].map((step, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">{i + 1}</span>
-                          <span>{step}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                  
-                  {/* QR Code */}
-                  {loadingQRCodes ? (
+                  {loadingWallet ? (
                     <div className="flex items-center justify-center py-4">
                       <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
                     </div>
-                  ) : qrCodes.length > 0 ? (
-                    <div className="space-y-3">
-                      <div className="relative bg-white rounded-xl p-4 mx-auto max-w-[200px] shadow-lg">
-                        <img 
-                          src={qrCodes[currentQRIndex]?.qr_image_url} 
-                          alt={qrCodes[currentQRIndex]?.name}
-                          className="w-full h-auto rounded-lg"
-                        />
-                        {qrCodes.length > 1 && (
-                          <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between px-1">
-                            <Button type="button" variant="ghost" size="icon" onClick={prevQRCode} className="bg-black/50 hover:bg-black/70 text-white rounded-full h-7 w-7">
-                              <ChevronLeft className="w-4 h-4" />
-                            </Button>
-                            <Button type="button" variant="ghost" size="icon" onClick={nextQRCode} className="bg-black/50 hover:bg-black/70 text-white rounded-full h-7 w-7">
-                              <ChevronRight className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        )}
+                  ) : hasEnoughBalance ? (
+                    /* Wallet has enough balance - auto deduct */
+                    <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl space-y-3">
+                      <div className="flex items-center gap-2 text-green-300">
+                        <CheckCircle className="w-5 h-5" />
+                        <p className="font-semibold">Pay from Wallet</p>
                       </div>
-                      <div className="text-center space-y-2">
-                        <p className="text-sm font-medium text-white">{qrCodes[currentQRIndex]?.name}</p>
-                        {qrCodes[currentQRIndex]?.upi_id && (
-                          <div className="flex items-center justify-center gap-2">
-                            <code className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">{qrCodes[currentQRIndex]?.upi_id}</code>
-                            <Button type="button" variant="ghost" size="icon" onClick={() => copyUpiId(qrCodes[currentQRIndex]?.upi_id || '')} className="h-6 w-6 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20">
-                              <Copy className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        )}
-                        {qrCodes.length > 1 && (
-                          <p className="text-xs text-gray-500">{currentQRIndex + 1} / {qrCodes.length}</p>
-                        )}
-                        <div className="flex items-center justify-center gap-2 pt-1">
-                          <Button type="button" variant="outline" size="sm" onClick={() => openQRCode(qrCodes[currentQRIndex]?.qr_image_url || '')} className="text-xs bg-transparent border-gray-600 text-gray-300 hover:bg-gray-700 rounded-lg h-8">
-                            <ExternalLink className="w-3 h-3 mr-1" /> Open
-                          </Button>
-                          <Button type="button" variant="outline" size="sm" onClick={() => downloadQRCode(qrCodes[currentQRIndex]?.qr_image_url || '', qrCodes[currentQRIndex]?.name || 'QR')} className="text-xs bg-transparent border-gray-600 text-gray-300 hover:bg-gray-700 rounded-lg h-8">
-                            <Download className="w-3 h-3 mr-1" /> Download
-                          </Button>
-                        </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-300">Wallet Balance:</span>
+                        <span className="text-green-400 font-bold">₹{walletBalance}</span>
                       </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-300">Entry Fee:</span>
+                        <span className="text-amber-300 font-bold">- ₹{entryFee}</span>
+                      </div>
+                      <div className="h-px bg-gray-700" />
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-300">Remaining:</span>
+                        <span className="text-white font-bold">₹{walletBalance - entryFee}</span>
+                      </div>
+                      <p className="text-xs text-green-200/70">
+                        ₹{entryFee} will be deducted from your wallet automatically.
+                      </p>
                     </div>
                   ) : (
-                    <p className="text-sm text-amber-300 text-center py-2">Contact admin for payment details</p>
-                  )}
-                  
-                  {/* Screenshot Upload */}
-                  <div className="space-y-2">
-                    <Label className="text-amber-200 font-medium">
-                      Upload Payment Screenshot <span className="text-red-400">*</span>
-                    </Label>
-                    <label className="cursor-pointer block">
-                      <div className={`flex items-center justify-center p-5 border-2 border-dashed rounded-xl transition-all ${screenshotPreview ? 'border-green-500/50 bg-green-500/5' : 'border-gray-600 hover:border-purple-500/50 bg-gray-800/30 hover:bg-gray-800/50'}`}>
-                        {screenshotPreview ? (
-                          <div className="relative">
-                            <img src={screenshotPreview} alt="Payment screenshot" className="max-h-36 rounded-lg shadow-lg" />
-                            <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                              <CheckCircle className="w-4 h-4 text-white" />
+                    /* Not enough balance - show manual payment */
+                    <>
+                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-300">Wallet Balance:</span>
+                          <span className="text-red-400 font-bold">₹{walletBalance}</span>
+                        </div>
+                        <p className="text-xs text-red-300/70 mt-1">
+                          Insufficient balance. Pay manually below.
+                        </p>
+                      </div>
+
+                      {/* Payment Instructions */}
+                      <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl space-y-2">
+                        <p className="text-sm font-semibold text-blue-300">How to pay:</p>
+                        <ol className="text-xs text-blue-200/80 space-y-2">
+                          {['Scan the QR code using any UPI app', `Pay exactly ₹${entryFee}`, 'Take a screenshot of success', 'Upload it below'].map((step, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">{i + 1}</span>
+                              <span>{step}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                      
+                      {/* QR Code */}
+                      {loadingQRCodes ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+                        </div>
+                      ) : qrCodes.length > 0 ? (
+                        <div className="space-y-3">
+                          <div className="relative bg-white rounded-xl p-4 mx-auto max-w-[200px] shadow-lg">
+                            <img 
+                              src={qrCodes[currentQRIndex]?.qr_image_url} 
+                              alt={qrCodes[currentQRIndex]?.name}
+                              className="w-full h-auto rounded-lg"
+                            />
+                            {qrCodes.length > 1 && (
+                              <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between px-1">
+                                <Button type="button" variant="ghost" size="icon" onClick={prevQRCode} className="bg-black/50 hover:bg-black/70 text-white rounded-full h-7 w-7">
+                                  <ChevronLeft className="w-4 h-4" />
+                                </Button>
+                                <Button type="button" variant="ghost" size="icon" onClick={nextQRCode} className="bg-black/50 hover:bg-black/70 text-white rounded-full h-7 w-7">
+                                  <ChevronRight className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-center space-y-2">
+                            <p className="text-sm font-medium text-white">{qrCodes[currentQRIndex]?.name}</p>
+                            {qrCodes[currentQRIndex]?.upi_id && (
+                              <div className="flex items-center justify-center gap-2">
+                                <code className="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">{qrCodes[currentQRIndex]?.upi_id}</code>
+                                <Button type="button" variant="ghost" size="icon" onClick={() => copyUpiId(qrCodes[currentQRIndex]?.upi_id || '')} className="h-6 w-6 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20">
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            )}
+                            {qrCodes.length > 1 && (
+                              <p className="text-xs text-gray-500">{currentQRIndex + 1} / {qrCodes.length}</p>
+                            )}
+                            <div className="flex items-center justify-center gap-2 pt-1">
+                              <Button type="button" variant="outline" size="sm" onClick={() => openQRCode(qrCodes[currentQRIndex]?.qr_image_url || '')} className="text-xs bg-transparent border-gray-600 text-gray-300 hover:bg-gray-700 rounded-lg h-8">
+                                <ExternalLink className="w-3 h-3 mr-1" /> Open
+                              </Button>
+                              <Button type="button" variant="outline" size="sm" onClick={() => downloadQRCode(qrCodes[currentQRIndex]?.qr_image_url || '', qrCodes[currentQRIndex]?.name || 'QR')} className="text-xs bg-transparent border-gray-600 text-gray-300 hover:bg-gray-700 rounded-lg h-8">
+                                <Download className="w-3 h-3 mr-1" /> Download
+                              </Button>
                             </div>
                           </div>
-                        ) : (
-                          <div className="flex flex-col items-center gap-2 text-gray-400">
-                            <div className="w-12 h-12 rounded-full bg-gray-700/50 flex items-center justify-center">
-                              <Upload className="w-5 h-5" />
-                            </div>
-                            <span className="text-sm">Tap to upload screenshot</span>
-                            <span className="text-xs text-gray-500">JPG, PNG up to 5MB</span>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-amber-300 text-center py-2">Contact admin for payment details</p>
+                      )}
+                      
+                      {/* Screenshot Upload */}
+                      <div className="space-y-2">
+                        <Label className="text-amber-200 font-medium">
+                          Upload Payment Screenshot <span className="text-red-400">*</span>
+                        </Label>
+                        <label className="cursor-pointer block">
+                          <div className={`flex items-center justify-center p-5 border-2 border-dashed rounded-xl transition-all ${screenshotPreview ? 'border-green-500/50 bg-green-500/5' : 'border-gray-600 hover:border-purple-500/50 bg-gray-800/30 hover:bg-gray-800/50'}`}>
+                            {screenshotPreview ? (
+                              <div className="relative">
+                                <img src={screenshotPreview} alt="Payment screenshot" className="max-h-36 rounded-lg shadow-lg" />
+                                <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                                  <CheckCircle className="w-4 h-4 text-white" />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-2 text-gray-400">
+                                <div className="w-12 h-12 rounded-full bg-gray-700/50 flex items-center justify-center">
+                                  <Upload className="w-5 h-5" />
+                                </div>
+                                <span className="text-sm">Tap to upload screenshot</span>
+                                <span className="text-xs text-gray-500">JPG, PNG up to 5MB</span>
+                              </div>
+                            )}
                           </div>
+                          <input type="file" accept="image/*" onChange={handleScreenshotChange} className="hidden" />
+                        </label>
+                        {screenshot && (
+                          <p className="text-xs text-green-400 flex items-center gap-1">
+                            <Image className="w-3.5 h-3.5" />
+                            {screenshot.name}
+                          </p>
                         )}
                       </div>
-                      <input type="file" accept="image/*" onChange={handleScreenshotChange} className="hidden" />
-                    </label>
-                    {screenshot && (
-                      <p className="text-xs text-green-400 flex items-center gap-1">
-                        <Image className="w-3.5 h-3.5" />
-                        {screenshot.name}
-                      </p>
-                    )}
-                  </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>

@@ -144,11 +144,28 @@ const TournamentRegistrationComponent: React.FC<TournamentRegistrationProps> = (
     setShowRegistrationDialog(true);
   };
 
-  const handleRegistrationSubmit = async (data: { gameId: string; customFields: Record<string, string>; screenshotUrl?: string }) => {
+  const handleRegistrationSubmit = async (data: { gameId: string; customFields: Record<string, string>; screenshotUrl?: string; paidViaWallet?: boolean }) => {
     setIsLoading(true);
     setShowRegistrationDialog(false);
 
     try {
+      // If paying via wallet, deduct balance first
+      if (!isFree && data.paidViaWallet && user) {
+        const { error: txError } = await supabase
+          .from('wallet_transactions')
+          .insert({
+            user_id: user.id,
+            amount: entryFeeAmount,
+            transaction_type: 'tournament_entry',
+            status: 'approved',
+            mode: 'esports',
+            tournament_id: tournament.id,
+            tournament_name: tournament.name,
+            payment_method: 'wallet',
+          });
+        if (txError) throw new Error('Failed to deduct wallet balance: ' + txError.message);
+      }
+
       const registrationData = {
         tournament_id: tournament.id,
         player_name: userProfile.display_name || userProfile.username || user?.email || 'Unknown Player',
@@ -158,14 +175,20 @@ const TournamentRegistrationComponent: React.FC<TournamentRegistrationProps> = (
         custom_fields_data: data.customFields
       };
 
-      const registration = await tournamentRegistrationService.registerForTournament(registrationData);
+      // If paid via wallet, mark as completed directly
+      const registration = data.paidViaWallet
+        ? await tournamentRegistrationService.registerForTournamentWithWallet(registrationData)
+        : await tournamentRegistrationService.registerForTournament(registrationData);
+      
       setUserRegistration(registration);
       
       toast({
         title: "Registration Submitted!",
-        description: isFree 
-          ? "You've been registered for the tournament." 
-          : "Your registration is pending payment verification by admin.",
+        description: data.paidViaWallet
+          ? `₹${entryFeeAmount} deducted from wallet. You're registered!`
+          : isFree 
+            ? "You've been registered for the tournament." 
+            : "Your registration is pending payment verification by admin.",
       });
       
       loadRegistrations();
