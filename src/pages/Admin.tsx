@@ -77,6 +77,7 @@ const Admin = () => {
     region: '',
     format: '',
     team_size: '',
+    team_payment_mode: 'each_pays' as 'each_pays' | 'leader_pays',
     organizer: '',
     rules: '',
     schedule: '',
@@ -170,6 +171,7 @@ const Admin = () => {
       region: '',
       format: '',
       team_size: '',
+      team_payment_mode: 'each_pays' as 'each_pays' | 'leader_pays',
       organizer: '',
       rules: '',
       schedule: '',
@@ -379,6 +381,7 @@ const Admin = () => {
       region: tournament.region || '',
       format: tournament.format || '',
       team_size: tournament.team_size || '',
+      team_payment_mode: (tournament.team_payment_mode || 'each_pays') as 'each_pays' | 'leader_pays',
       organizer: tournament.organizer || '',
       rules: tournament.rules || '',
       schedule: tournament.schedule || '',
@@ -773,9 +776,31 @@ const Admin = () => {
                           <SelectItem value="2">Duo (2 Players)</SelectItem>
                           <SelectItem value="4">Squad (4 Players)</SelectItem>
                           <SelectItem value="5">5-Man Squad (5 Players)</SelectItem>
-                        </SelectContent>
+                         </SelectContent>
                       </Select>
                     </div>
+                    {parseInt(tournamentForm.team_size || '1') > 1 && tournamentForm.entry_fee_type === 'paid' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Team Payment Mode</label>
+                        <Select 
+                          value={(tournamentForm as any).team_payment_mode || 'each_pays'} 
+                          onValueChange={(value) => setTournamentForm({...tournamentForm, team_payment_mode: value} as any)}
+                        >
+                          <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-700 border-gray-600">
+                            <SelectItem value="each_pays">Each Member Pays</SelectItem>
+                            <SelectItem value="leader_pays">Leader Pays for All</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {(tournamentForm as any).team_payment_mode === 'leader_pays' 
+                            ? 'Leader pays full amount for entire team. Members join free with team code.' 
+                            : 'Each team member pays individually.'}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   
                    <div className="grid md:grid-cols-2 gap-4">

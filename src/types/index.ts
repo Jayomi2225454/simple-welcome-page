@@ -28,6 +28,7 @@ export interface Tournament {
   timer_duration?: number;
   timer_start_time?: string;
   timer_is_running?: boolean;
+  team_payment_mode?: 'leader_pays' | 'each_pays';
   overview_content?: OverviewContent;
   schedule_content?: ScheduleContent;
   prizes_content?: PrizesContent;

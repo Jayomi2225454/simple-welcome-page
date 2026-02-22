@@ -1214,6 +1214,7 @@ export type Database = {
           start_date: string | null
           status: string | null
           team_mode: string | null
+          team_payment_mode: string | null
           team_size: number | null
           timer_duration: number | null
           timer_is_running: boolean
@@ -1248,6 +1249,7 @@ export type Database = {
           start_date?: string | null
           status?: string | null
           team_mode?: string | null
+          team_payment_mode?: string | null
           team_size?: number | null
           timer_duration?: number | null
           timer_is_running?: boolean
@@ -1282,6 +1284,7 @@ export type Database = {
           start_date?: string | null
           status?: string | null
           team_mode?: string | null
+          team_payment_mode?: string | null
           team_size?: number | null
           timer_duration?: number | null
           timer_is_running?: boolean
