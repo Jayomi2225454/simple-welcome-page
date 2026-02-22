@@ -151,7 +151,8 @@ const Index = () => {
           
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {tournaments.slice(0, 4).map((tournament) => (
-              <Card key={tournament.id} className="bg-gray-800/50 border-gray-700 hover:border-purple-500/50 transition-all duration-300 group overflow-hidden">
+              <Link to={`/tournaments/${tournament.id}`} key={tournament.id}>
+              <Card className="bg-gray-800/50 border-gray-700 hover:border-purple-500/50 transition-all duration-300 group overflow-hidden cursor-pointer">
                 {/* Tournament Banner */}
                 <div className="relative aspect-video overflow-hidden">
                   {tournament.banner ? (
@@ -197,6 +198,7 @@ const Index = () => {
                   </Button>
                 </CardContent>
               </Card>
+              </Link>
             ))}
           </div>
         </div>
@@ -219,7 +221,8 @@ const Index = () => {
           
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {matches.filter(match => match.status === 'live').slice(0, 3).map((match) => (
-              <Card key={match.id} className="bg-gray-800/50 border-gray-700 hover:border-red-500/50 transition-all duration-300">
+              <Link to={match.tournament_id ? `/tournaments/${match.tournament_id}` : '/live-matches'} key={match.id}>
+              <Card className="bg-gray-800/50 border-gray-700 hover:border-red-500/50 transition-all duration-300 cursor-pointer">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-sm text-gray-400">{match.game}</span>
@@ -262,6 +265,7 @@ const Index = () => {
                   </Button>
                 </CardContent>
               </Card>
+              </Link>
             ))}
           </div>
         </div>
