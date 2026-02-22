@@ -1,0 +1,1 @@
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS team_payment_mode text DEFAULT 'each_pays';

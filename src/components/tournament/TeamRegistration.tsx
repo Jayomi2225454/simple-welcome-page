@@ -7,10 +7,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Tournament } from '@/types';
-import { Users, Crown, UserPlus, Copy, CheckCircle, Clock, Lock, Hash, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Users, Crown, UserPlus, Copy, CheckCircle, Clock, Lock, Hash, XCircle, AlertTriangle, RefreshCw, Trash2, Wallet } from 'lucide-react';
 import { tournamentRegistrationService, TournamentRoom } from '@/services/tournamentRegistrationService';
 import RegistrationFormDialog from './RegistrationFormDialog';
 import PaymentRetryDialog from './PaymentRetryDialog';
+import { Link } from 'react-router-dom';
 
 interface TeamRegistrationProps {
   tournament: Tournament;
@@ -52,6 +53,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
   const [roomDetails, setRoomDetails] = useState<TournamentRoom | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [userRegistration, setUserRegistration] = useState<any>(null);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
   
   // Dialog states for registration flow
   const [showRegistrationDialog, setShowRegistrationDialog] = useState(false);
@@ -67,6 +69,10 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
 
   const isFree = !tournament.entry_fee || tournament.entry_fee === 'Free' || tournament.entry_fee === '0' || tournament.entry_fee === '₹0';
   const entryFeeAmount = isFree ? 0 : parseInt(tournament.entry_fee?.replace(/[^0-9]/g, '') || '0');
+  
+  // Check if leader pays for all
+  const isLeaderPays = (tournament as any).team_payment_mode === 'leader_pays';
+  const totalLeaderAmount = isLeaderPays ? entryFeeAmount * teamSize : entryFeeAmount;
 
   const getTeamModeLabel = () => {
     if (teamSize === 1) return 'Solo';
@@ -80,6 +86,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
     if (user) {
       loadUserData();
       loadAvailableTeams();
+      loadWalletBalance();
     }
   }, [user, tournament.id]);
 
@@ -110,7 +117,6 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
       )
       .subscribe();
 
-    // Subscribe to registration updates
     const regChannel = supabase
       .channel(`reg-updates-team-${tournament.id}-${user.id}`)
       .on(
@@ -133,6 +139,21 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
     };
   }, [user, tournament.id]);
 
+  const loadWalletBalance = async () => {
+    if (!user) return;
+    try {
+      const { data } = await supabase
+        .from('wallet_balances')
+        .select('available_balance')
+        .eq('user_id', user.id)
+        .eq('mode', 'esports')
+        .maybeSingle();
+      setWalletBalance(data?.available_balance || 0);
+    } catch (error) {
+      console.error('Error loading wallet balance:', error);
+    }
+  };
+
   const loadUserData = async () => {
     if (!user) return;
 
@@ -145,11 +166,9 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
       
       setUserProfile(profile);
 
-      // Check user registration status
       const registration = await tournamentRegistrationService.checkUserRegistration(user.id, tournament.id);
       setUserRegistration(registration);
 
-      // Check if user is already in a team for this tournament
       const { data: memberData } = await supabase
         .from('tournament_team_members')
         .select(`
@@ -236,26 +255,94 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
       return;
     }
 
+    // For leader_pays mode, check wallet balance and auto-deduct
+    if (isLeaderPays && !isFree) {
+      if (walletBalance < totalLeaderAmount) {
+        toast({
+          title: "Insufficient Balance",
+          description: `You need ₹${totalLeaderAmount} in your wallet (₹${entryFeeAmount} × ${teamSize} players). Current balance: ₹${walletBalance}.`,
+          variant: "destructive"
+        });
+        return;
+      }
+      // Direct wallet flow - no payment dialog needed
+      await createTeamWithWallet();
+      return;
+    }
+
     setPendingTeamAction({ type: 'create' });
     setShowRegistrationDialog(true);
   };
 
-  // Open registration dialog for joining team
-  const handleJoinTeam = async (teamId: string) => {
-    if (!user || !userProfile) {
+  // Create team with wallet payment (leader_pays mode)
+  const createTeamWithWallet = async () => {
+    if (!user || !userProfile) return;
+    setIsLoading(true);
+
+    try {
+      // Deduct wallet balance
+      const { error: txError } = await supabase
+        .from('wallet_transactions')
+        .insert({
+          user_id: user.id,
+          amount: totalLeaderAmount,
+          transaction_type: 'tournament_entry',
+          status: 'approved',
+          mode: 'esports',
+          tournament_id: tournament.id,
+          tournament_name: tournament.name,
+          payment_method: 'wallet',
+        });
+      if (txError) throw new Error('Failed to deduct wallet balance: ' + txError.message);
+
+      // Create registration
+      const registrationData = {
+        tournament_id: tournament.id,
+        player_name: userProfile.display_name || userProfile.username || user.email || 'Unknown Player',
+        game_id: userProfile.game_id || 'N/A',
+        payment_amount: totalLeaderAmount,
+        custom_fields_data: {}
+      };
+      const registration = await tournamentRegistrationService.registerForTournamentWithWallet(registrationData);
+      setUserRegistration(registration);
+
+      // Create team
+      const { data: team, error } = await supabase
+        .from('tournament_teams')
+        .insert({
+          team_name: teamName.trim(),
+          captain_user_id: user.id,
+          tournament_id: tournament.id,
+          max_members: teamSize
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setUserTeam(team as Team);
+      setTeamName('');
+      loadTeamMembers(team.id);
+      loadWalletBalance();
+
       toast({
-        title: "Profile Required",
-        description: "Please complete your profile first.",
+        title: "Team Created!",
+        description: `₹${totalLeaderAmount} deducted from wallet (₹${entryFeeAmount} × ${teamSize}). Share your team code for others to join free!`,
+      });
+
+      loadUserData();
+    } catch (error: any) {
+      toast({
+        title: "Registration Failed",
+        description: error.message || "Please try again.",
         variant: "destructive"
       });
-      return;
+    } finally {
+      setIsLoading(false);
     }
-
-    setPendingTeamAction({ type: 'join', teamId });
-    setShowRegistrationDialog(true);
   };
 
-  // Open registration dialog for joining by code
+  // Join team by code (for leader_pays, members join free)
   const handleJoinByCode = async () => {
     if (!user || !userProfile) {
       toast({
@@ -275,19 +362,173 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
       return;
     }
 
+    // For leader_pays, members join free - no payment dialog
+    if (isLeaderPays && !isFree) {
+      await joinTeamByCodeFree();
+      return;
+    }
+
     setPendingTeamAction({ type: 'join_by_code' });
     setShowRegistrationDialog(true);
   };
 
-  // Handle registration submission with custom fields
-  const handleRegistrationSubmit = async (data: { gameId: string; customFields: Record<string, string>; screenshotUrl?: string }) => {
+  // Join team free (leader already paid)
+  const joinTeamByCodeFree = async () => {
+    if (!user || !userProfile) return;
+    setIsLoading(true);
+
+    try {
+      const codeToSearch = joinTeamCode.trim().toLowerCase();
+      
+      const { data: teams } = await supabase
+        .from('tournament_teams')
+        .select('*')
+        .eq('tournament_id', tournament.id)
+        .eq('is_full', false);
+
+      const matchingTeam = teams?.find(team => 
+        team.id.substring(0, 8).toLowerCase() === codeToSearch
+      );
+
+      if (!matchingTeam) {
+        toast({
+          title: "Team Not Found",
+          description: "Invalid team code or team is already full.",
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Create registration (free for member since leader paid)
+      const registrationData = {
+        tournament_id: tournament.id,
+        player_name: userProfile.display_name || userProfile.username || user.email || 'Unknown Player',
+        game_id: userProfile.game_id || 'N/A',
+        payment_amount: 0,
+        custom_fields_data: {}
+      };
+      const registration = await tournamentRegistrationService.registerForTournamentWithWallet(registrationData);
+      setUserRegistration(registration);
+
+      // Join team
+      const { error } = await supabase
+        .from('tournament_team_members')
+        .insert({
+          team_id: matchingTeam.id,
+          user_id: user.id,
+          role: 'member'
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Joined Team!",
+        description: `You've joined team "${matchingTeam.team_name}" for free! Leader has already paid.`,
+      });
+
+      setJoinTeamCode('');
+      loadUserData();
+      loadAvailableTeams();
+    } catch (error: any) {
+      toast({
+        title: "Join Failed",
+        description: error.message || "Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Open registration dialog for joining team from list
+  const handleJoinTeam = async (teamId: string) => {
+    if (!user || !userProfile) {
+      toast({
+        title: "Profile Required",
+        description: "Please complete your profile first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (isLeaderPays && !isFree) {
+      // Members join free in leader_pays mode
+      await joinTeamDirectFree(teamId);
+      return;
+    }
+
+    setPendingTeamAction({ type: 'join', teamId });
+    setShowRegistrationDialog(true);
+  };
+
+  const joinTeamDirectFree = async (teamId: string) => {
+    if (!user || !userProfile) return;
+    setIsLoading(true);
+
+    try {
+      const registrationData = {
+        tournament_id: tournament.id,
+        player_name: userProfile.display_name || userProfile.username || user.email || 'Unknown Player',
+        game_id: userProfile.game_id || 'N/A',
+        payment_amount: 0,
+        custom_fields_data: {}
+      };
+      await tournamentRegistrationService.registerForTournamentWithWallet(registrationData);
+
+      const { error } = await supabase
+        .from('tournament_team_members')
+        .insert({
+          team_id: teamId,
+          user_id: user.id,
+          role: 'member'
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Joined Team!",
+        description: "You've joined the team for free! Leader has already paid.",
+      });
+
+      loadUserData();
+      loadAvailableTeams();
+    } catch (error: any) {
+      toast({
+        title: "Join Failed",
+        description: error.message || "Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle registration submission with custom fields (each_pays mode)
+  const handleRegistrationSubmit = async (data: { gameId: string; customFields: Record<string, string>; screenshotUrl?: string; paidViaWallet?: boolean }) => {
     if (!pendingTeamAction || !user) return;
 
     setIsLoading(true);
     setShowRegistrationDialog(false);
 
     try {
-      // Create registration record first
+      // If paying via wallet, deduct balance first
+      if (!isFree && data.paidViaWallet) {
+        const { error: txError } = await supabase
+          .from('wallet_transactions')
+          .insert({
+            user_id: user.id,
+            amount: entryFeeAmount,
+            transaction_type: 'tournament_entry',
+            status: 'approved',
+            mode: 'esports',
+            tournament_id: tournament.id,
+            tournament_name: tournament.name,
+            payment_method: 'wallet',
+          });
+        if (txError) throw new Error('Failed to deduct wallet balance: ' + txError.message);
+      }
+
       const registrationData = {
         tournament_id: tournament.id,
         player_name: userProfile?.display_name || userProfile?.username || user?.email || 'Unknown Player',
@@ -297,10 +538,12 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         custom_fields_data: data.customFields
       };
 
-      const registration = await tournamentRegistrationService.registerForTournament(registrationData);
+      const registration = data.paidViaWallet
+        ? await tournamentRegistrationService.registerForTournamentWithWallet(registrationData)
+        : await tournamentRegistrationService.registerForTournament(registrationData);
       setUserRegistration(registration);
 
-      // Now proceed with team action
+      // Proceed with team action
       if (pendingTeamAction.type === 'create') {
         const { data: team, error } = await supabase
           .from('tournament_teams')
@@ -321,9 +564,11 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         
         toast({
           title: "Team Created!",
-          description: isFree 
-            ? `Your team "${team.team_name}" has been created. Share your team code for others to join.`
-            : `Your team "${team.team_name}" has been created. Payment is pending admin approval.`,
+          description: data.paidViaWallet
+            ? `₹${entryFeeAmount} deducted from wallet. Share your team code for others to join.`
+            : isFree 
+              ? `Your team "${team.team_name}" has been created. Share your team code for others to join.`
+              : `Your team "${team.team_name}" has been created. Payment is pending admin approval.`,
         });
       } else if (pendingTeamAction.type === 'join' && pendingTeamAction.teamId) {
         const { error } = await supabase
@@ -338,12 +583,13 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
 
         toast({
           title: "Joined Team!",
-          description: isFree 
-            ? "You have successfully joined the team."
-            : "You have joined the team. Payment is pending admin approval.",
+          description: data.paidViaWallet
+            ? `₹${entryFeeAmount} deducted from wallet. You've joined the team!`
+            : isFree 
+              ? "You have successfully joined the team."
+              : "You have joined the team. Payment is pending admin approval.",
         });
 
-        loadUserData();
         loadAvailableTeams();
       } else if (pendingTeamAction.type === 'join_by_code') {
         const codeToSearch = joinTeamCode.trim().toLowerCase();
@@ -379,17 +625,15 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
 
         toast({
           title: "Joined Team!",
-          description: isFree 
-            ? `You have successfully joined team "${matchingTeam.team_name}"!`
-            : `You have joined team "${matchingTeam.team_name}". Payment is pending admin approval.`,
+          description: `You have successfully joined team "${matchingTeam.team_name}"!`,
         });
 
         setJoinTeamCode('');
-        loadUserData();
         loadAvailableTeams();
       }
 
       loadUserData();
+      loadWalletBalance();
     } catch (error: any) {
       toast({
         title: "Registration Failed",
@@ -421,6 +665,48 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
       toast({
         title: "Submission Failed",
         description: error.message || "Failed to submit payment",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Leader can remove a team member
+  const handleRemoveMember = async (memberId: string, memberUserId: string) => {
+    if (!userTeam || userTeam.captain_user_id !== user?.id) return;
+
+    setIsLoading(true);
+    try {
+      // Remove from team
+      const { error: memberError } = await supabase
+        .from('tournament_team_members')
+        .delete()
+        .eq('id', memberId);
+
+      if (memberError) throw memberError;
+
+      // Also remove their registration
+      const { error: regError } = await supabase
+        .from('tournament_registrations')
+        .delete()
+        .eq('user_id', memberUserId)
+        .eq('tournament_id', tournament.id);
+
+      // Don't throw on reg error - member might not have a separate registration
+
+      toast({
+        title: "Member Removed",
+        description: "Team member has been removed.",
+      });
+
+      loadTeamMembers(userTeam.id);
+      loadUserData();
+      loadAvailableTeams();
+    } catch (error: any) {
+      toast({
+        title: "Failed to Remove",
+        description: error.message || "Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -481,6 +767,8 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
 
   // User is already in a team
   if (userTeam) {
+    const isCaptain = userTeam.captain_user_id === user.id;
+
     return (
       <div className="space-y-6">
         {/* Team Status Card */}
@@ -504,6 +792,19 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Leader Pays Info */}
+            {isLeaderPays && !isFree && isCaptain && (
+              <div className="p-4 bg-blue-500/10 border border-blue-400/30 rounded-lg">
+                <div className="flex items-center gap-2 text-blue-300">
+                  <Wallet className="w-5 h-5" />
+                  <p className="font-medium">Leader Pays Mode</p>
+                </div>
+                <p className="text-sm text-blue-200/80 mt-1">
+                  You paid ₹{totalLeaderAmount} (₹{entryFeeAmount} × {teamSize}) for the entire team. Members join free with your team code.
+                </p>
+              </div>
+            )}
+
             {/* Payment Pending Message */}
             {userRegistration?.payment_status === 'pending' && !isFree && (
               <div className="p-4 bg-yellow-500/10 border border-yellow-400/30 rounded-lg">
@@ -538,7 +839,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
             )}
 
             {/* Share Team Code */}
-            {!userTeam.is_full && userTeam.captain_user_id === user.id && (
+            {!userTeam.is_full && isCaptain && (
               <div className="p-4 bg-black/20 rounded-lg border border-purple-500/20">
                 <p className="text-sm text-purple-200 mb-2 flex items-center gap-2">
                   <Hash className="w-4 h-4" />
@@ -553,7 +854,9 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
                   </Button>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">
-                  Teammates can join using this code in the "Join with Team Code" section.
+                  {isLeaderPays && !isFree 
+                    ? "Members can join for free using this code since you've already paid for the team."
+                    : "Teammates can join using this code in the 'Join with Team Code' section."}
                 </p>
               </div>
             )}
@@ -578,9 +881,23 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
                       <p className="text-sm text-gray-400">Game ID: {member.profile.game_id}</p>
                     )}
                   </div>
-                  <Badge variant={member.role === 'captain' ? 'default' : 'outline'}>
-                    {member.role === 'captain' ? 'Captain' : 'Member'}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={member.role === 'captain' ? 'default' : 'outline'}>
+                      {member.role === 'captain' ? 'Captain' : 'Member'}
+                    </Badge>
+                    {/* Remove button for captain to remove members (not self) */}
+                    {isCaptain && member.role !== 'captain' && tournament.status !== 'completed' && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleRemoveMember(member.id, member.user_id)}
+                        disabled={isLoading}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/20 h-8 w-8 p-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -670,13 +987,24 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
             <p className="text-sm text-purple-200">
               Team Size: {teamSize} players • {availableTeams.length} teams looking for members
             </p>
+            {isLeaderPays && !isFree && (
+              <p className="text-sm text-blue-300 mt-1 flex items-center gap-1">
+                <Wallet className="w-4 h-4" />
+                Leader pays ₹{totalLeaderAmount} (₹{entryFeeAmount} × {teamSize}) for entire team. Members join free.
+              </p>
+            )}
           </div>
 
           {/* Create Team Section */}
           <div className="p-4 bg-black/20 rounded-lg border border-purple-500/20 space-y-3">
             <div className="flex items-center gap-2 text-white font-medium">
               <Crown className="w-5 h-5 text-yellow-400" />
-              Create Your Team {!isFree && `(₹${entryFeeAmount})`}
+              Create Your Team 
+              {!isFree && (
+                <span className="text-sm text-purple-300">
+                  {isLeaderPays ? `(₹${totalLeaderAmount} from wallet)` : `(₹${entryFeeAmount})`}
+                </span>
+              )}
             </div>
             <div className="flex gap-2">
               <Input
@@ -694,8 +1022,22 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
                 Create
               </Button>
             </div>
+            {isLeaderPays && !isFree && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-400">
+                  Wallet Balance: <span className={walletBalance >= totalLeaderAmount ? 'text-green-400' : 'text-red-400'}>₹{walletBalance}</span>
+                </span>
+                {walletBalance < totalLeaderAmount && (
+                  <Link to="/wallet" className="text-purple-400 hover:underline">
+                    Add funds →
+                  </Link>
+                )}
+              </div>
+            )}
             <p className="text-xs text-gray-400">
-              As captain, you'll get a Team Code to share with your teammates.
+              {isLeaderPays && !isFree
+                ? "As captain, you'll pay for the entire team from your wallet and get a Team Code to share."
+                : "As captain, you'll get a Team Code to share with your teammates."}
             </p>
           </div>
 
@@ -703,7 +1045,13 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
           <div className="p-4 bg-black/20 rounded-lg border border-green-500/20 space-y-3">
             <div className="flex items-center gap-2 text-white font-medium">
               <Hash className="w-5 h-5 text-green-400" />
-              Join with Team Code {!isFree && `(₹${entryFeeAmount})`}
+              Join with Team Code
+              {!isFree && !isLeaderPays && (
+                <span className="text-sm text-green-300">(₹{entryFeeAmount})</span>
+              )}
+              {isLeaderPays && !isFree && (
+                <Badge variant="outline" className="border-green-500/50 text-green-400 text-xs">FREE</Badge>
+              )}
             </div>
             <div className="flex gap-2">
               <Input
@@ -715,22 +1063,24 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
               />
               <Button
                 onClick={handleJoinByCode}
-                disabled={isJoiningByCode || !joinTeamCode.trim()}
+                disabled={isJoiningByCode || isLoading || !joinTeamCode.trim()}
                 className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
               >
                 <UserPlus className="w-4 h-4 mr-2" />
-                {isJoiningByCode ? 'Joining...' : 'Join'}
+                {isLoading ? 'Joining...' : 'Join'}
               </Button>
             </div>
             <p className="text-xs text-gray-400">
-              Got a team code from your captain? Enter it here to join their team.
+              {isLeaderPays && !isFree
+                ? "Got a team code from your captain? Join for free — your leader has already paid!"
+                : "Got a team code from your captain? Enter it here to join their team."}
             </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Available Teams to Join */}
-      {availableTeams.length > 0 && (
+      {/* Available Teams to Join (only show in each_pays or free mode) */}
+      {availableTeams.length > 0 && (!isLeaderPays || isFree) && (
         <Card className="bg-gray-800 border-gray-700">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
@@ -755,7 +1105,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
                     className="bg-green-500 hover:bg-green-600"
                   >
                     <UserPlus className="w-4 h-4 mr-2" />
-                    {isFree ? 'Join' : `Join (₹${entryFeeAmount})`}
+                    {isFree || isLeaderPays ? 'Join Free' : `Join (₹${entryFeeAmount})`}
                   </Button>
                 </div>
               ))}
@@ -764,7 +1114,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         </Card>
       )}
 
-      {/* Registration Form Dialog */}
+      {/* Registration Form Dialog (only used in each_pays mode) */}
       <RegistrationFormDialog
         open={showRegistrationDialog}
         onOpenChange={(open) => {
