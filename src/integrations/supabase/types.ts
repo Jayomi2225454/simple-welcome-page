@@ -921,6 +921,60 @@ export type Database = {
           },
         ]
       }
+      tournament_player_points: {
+        Row: {
+          created_at: string
+          id: string
+          kills: number
+          player_name: string
+          points: number
+          team_id: string
+          tournament_id: string
+          updated_at: string
+          user_id: string
+          wins: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kills?: number
+          player_name: string
+          points?: number
+          team_id: string
+          tournament_id: string
+          updated_at?: string
+          user_id: string
+          wins?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kills?: number
+          player_name?: string
+          points?: number
+          team_id?: string
+          tournament_id?: string
+          updated_at?: string
+          user_id?: string
+          wins?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_player_points_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "tournament_teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_player_points_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tournament_points: {
         Row: {
           created_at: string
