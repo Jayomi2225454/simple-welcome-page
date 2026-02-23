@@ -615,6 +615,11 @@ const PointsTableAdmin = () => {
         </CardContent>
       </Card>
 
+      {/* Registered Teams & Player Points */}
+      {selectedTournament && (
+        <PlayerPointsAdmin tournamentId={selectedTournament} />
+      )}
+
       {/* Add New Team */}
       {selectedTournament && (
         <Card className="bg-gray-800 border-gray-700">
