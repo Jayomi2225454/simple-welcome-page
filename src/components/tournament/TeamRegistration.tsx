@@ -528,7 +528,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         tournament_id: tournament.id,
         player_name: userProfile?.display_name || userProfile?.username || user?.email || 'Unknown Player',
         game_id: data.gameId,
-        payment_amount: entryFeeAmount,
+        payment_amount: isLeaderPays ? totalLeaderAmount : entryFeeAmount,
         payment_screenshot_url: data.screenshotUrl,
         custom_fields_data: data.customFields
       };
