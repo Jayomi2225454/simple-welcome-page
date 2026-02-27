@@ -255,19 +255,14 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
       return;
     }
 
-    // For leader_pays mode, check wallet balance and auto-deduct
+    // For leader_pays mode with sufficient wallet balance, auto-deduct
     if (isLeaderPays && !isFree) {
-      if (walletBalance < totalLeaderAmount) {
-        toast({
-          title: "Insufficient Balance",
-          description: `You need ₹${totalLeaderAmount} in your wallet (₹${entryFeeAmount} × ${teamSize} players). Current balance: ₹${walletBalance}.`,
-          variant: "destructive"
-        });
+      if (walletBalance >= totalLeaderAmount) {
+        // Direct wallet flow - no payment dialog needed
+        await createTeamWithWallet();
         return;
       }
-      // Direct wallet flow - no payment dialog needed
-      await createTeamWithWallet();
-      return;
+      // Insufficient balance - fall through to show registration dialog with manual payment
     }
 
     setPendingTeamAction({ type: 'create' });
