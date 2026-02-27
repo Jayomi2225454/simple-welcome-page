@@ -513,7 +513,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
           .from('wallet_transactions')
           .insert({
             user_id: user.id,
-            amount: entryFeeAmount,
+            amount: isLeaderPays ? totalLeaderAmount : entryFeeAmount,
             transaction_type: 'tournament_entry',
             status: 'approved',
             mode: 'esports',
