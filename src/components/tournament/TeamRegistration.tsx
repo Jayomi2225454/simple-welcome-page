@@ -1120,7 +1120,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         isLoading={isLoading}
         tournamentId={tournament.id}
         isPaid={!isFree}
-        entryFee={entryFeeAmount}
+        entryFee={isLeaderPays ? totalLeaderAmount : entryFeeAmount}
       />
     </div>
   );
