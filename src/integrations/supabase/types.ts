@@ -175,6 +175,57 @@ export type Database = {
         }
         Relationships: []
       }
+      events: {
+        Row: {
+          about: string | null
+          banner_image: string | null
+          conducted_by: Json | null
+          created_at: string
+          description: string | null
+          documents: Json | null
+          end_date: string
+          gallery_images: Json | null
+          id: string
+          registration_link: string | null
+          short_description: string | null
+          start_date: string
+          title: string
+          type: string
+        }
+        Insert: {
+          about?: string | null
+          banner_image?: string | null
+          conducted_by?: Json | null
+          created_at?: string
+          description?: string | null
+          documents?: Json | null
+          end_date: string
+          gallery_images?: Json | null
+          id?: string
+          registration_link?: string | null
+          short_description?: string | null
+          start_date: string
+          title: string
+          type: string
+        }
+        Update: {
+          about?: string | null
+          banner_image?: string | null
+          conducted_by?: Json | null
+          created_at?: string
+          description?: string | null
+          documents?: Json | null
+          end_date?: string
+          gallery_images?: Json | null
+          id?: string
+          registration_link?: string | null
+          short_description?: string | null
+          start_date?: string
+          title?: string
+          type?: string
+        }
+        Relationships: []
+      }
       leaderboards: {
         Row: {
           avatar_url: string | null

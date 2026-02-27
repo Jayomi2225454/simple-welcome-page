@@ -255,19 +255,14 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
       return;
     }
 
-    // For leader_pays mode, check wallet balance and auto-deduct
+    // For leader_pays mode with sufficient wallet balance, auto-deduct
     if (isLeaderPays && !isFree) {
-      if (walletBalance < totalLeaderAmount) {
-        toast({
-          title: "Insufficient Balance",
-          description: `You need ₹${totalLeaderAmount} in your wallet (₹${entryFeeAmount} × ${teamSize} players). Current balance: ₹${walletBalance}.`,
-          variant: "destructive"
-        });
+      if (walletBalance >= totalLeaderAmount) {
+        // Direct wallet flow - no payment dialog needed
+        await createTeamWithWallet();
         return;
       }
-      // Direct wallet flow - no payment dialog needed
-      await createTeamWithWallet();
-      return;
+      // Insufficient balance - fall through to show registration dialog with manual payment
     }
 
     setPendingTeamAction({ type: 'create' });
@@ -518,7 +513,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
           .from('wallet_transactions')
           .insert({
             user_id: user.id,
-            amount: entryFeeAmount,
+            amount: isLeaderPays ? totalLeaderAmount : entryFeeAmount,
             transaction_type: 'tournament_entry',
             status: 'approved',
             mode: 'esports',
@@ -533,7 +528,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         tournament_id: tournament.id,
         player_name: userProfile?.display_name || userProfile?.username || user?.email || 'Unknown Player',
         game_id: data.gameId,
-        payment_amount: entryFeeAmount,
+        payment_amount: isLeaderPays ? totalLeaderAmount : entryFeeAmount,
         payment_screenshot_url: data.screenshotUrl,
         custom_fields_data: data.customFields
       };
@@ -1125,7 +1120,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         isLoading={isLoading}
         tournamentId={tournament.id}
         isPaid={!isFree}
-        entryFee={entryFeeAmount}
+        entryFee={isLeaderPays ? totalLeaderAmount : entryFeeAmount}
       />
     </div>
   );
