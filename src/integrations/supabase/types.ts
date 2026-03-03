@@ -1303,6 +1303,7 @@ export type Database = {
           game: string
           id: string
           image_url: string | null
+          kill_points_value: number
           max_participants: number | null
           name: string
           organizer: string | null
@@ -1326,6 +1327,7 @@ export type Database = {
           timer_start_time: string | null
           tournament_type: string | null
           updated_at: string
+          win_points_value: number
         }
         Insert: {
           banner_url?: string | null
@@ -1338,6 +1340,7 @@ export type Database = {
           game: string
           id?: string
           image_url?: string | null
+          kill_points_value?: number
           max_participants?: number | null
           name: string
           organizer?: string | null
@@ -1361,6 +1364,7 @@ export type Database = {
           timer_start_time?: string | null
           tournament_type?: string | null
           updated_at?: string
+          win_points_value?: number
         }
         Update: {
           banner_url?: string | null
@@ -1373,6 +1377,7 @@ export type Database = {
           game?: string
           id?: string
           image_url?: string | null
+          kill_points_value?: number
           max_participants?: number | null
           name?: string
           organizer?: string | null
@@ -1396,6 +1401,7 @@ export type Database = {
           timer_start_time?: string | null
           tournament_type?: string | null
           updated_at?: string
+          win_points_value?: number
         }
         Relationships: []
       }
