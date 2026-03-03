@@ -3,11 +3,29 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Users, ChevronDown, ChevronRight, Save, Loader2, RefreshCw, User, Trophy, Crosshair, Award, Hash } from 'lucide-react';
+import { Users, ChevronDown, ChevronRight, Save, Loader2, RefreshCw, User, Trophy, Crosshair, Award, Hash, Settings, Gamepad, Phone, Mail, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+
+interface PlayerProfile {
+  username?: string;
+  display_name?: string;
+  name?: string;
+  email?: string;
+  phone_number?: string;
+  avatar_url?: string;
+  game_id?: string;
+}
+
+interface RegistrationData {
+  game_id?: string;
+  player_name?: string;
+  custom_fields_data?: Record<string, any>;
+  payment_status?: string;
+}
 
 interface TeamMember {
   user_id: string;
@@ -16,6 +34,8 @@ interface TeamMember {
   points: number;
   kills: number;
   wins: number;
+  profile?: PlayerProfile;
+  registration?: RegistrationData;
 }
 
 interface RegisteredTeam {
@@ -37,10 +57,70 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
+  const [showSettings, setShowSettings] = useState(false);
+  const [killPointsValue, setKillPointsValue] = useState(1);
+  const [winPointsValue, setWinPointsValue] = useState(1);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
-    if (tournamentId) loadTeamsAndPlayers();
+    if (tournamentId) {
+      loadPointSettings();
+      loadTeamsAndPlayers();
+    }
   }, [tournamentId]);
+
+  const loadPointSettings = async () => {
+    try {
+      const { data } = await supabase
+        .from('tournaments')
+        .select('kill_points_value, win_points_value')
+        .eq('id', tournamentId)
+        .single();
+      if (data) {
+        setKillPointsValue((data as any).kill_points_value ?? 1);
+        setWinPointsValue((data as any).win_points_value ?? 1);
+      }
+    } catch (e) {
+      console.error('Error loading point settings:', e);
+    }
+  };
+
+  const savePointSettings = async () => {
+    setSavingSettings(true);
+    try {
+      const { error } = await supabase
+        .from('tournaments')
+        .update({
+          kill_points_value: killPointsValue,
+          win_points_value: winPointsValue,
+        } as any)
+        .eq('id', tournamentId);
+      if (error) throw error;
+      toast({ title: 'Settings Saved', description: `1 Kill = ${killPointsValue} pts, 1 Win = ${winPointsValue} pts` });
+      // Recalculate all points
+      recalculateAllPoints();
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const recalculateAllPoints = () => {
+    setTeams(prev => prev.map(team => {
+      const members = team.members.map(m => ({
+        ...m,
+        points: m.kills * killPointsValue + m.wins * winPointsValue,
+      }));
+      return {
+        ...team,
+        members,
+        totalPoints: members.reduce((s, m) => s + m.points, 0),
+        totalKills: members.reduce((s, m) => s + m.kills, 0),
+        totalWins: members.reduce((s, m) => s + m.wins, 0),
+      };
+    }));
+  };
 
   const loadTeamsAndPlayers = async () => {
     setLoading(true);
@@ -67,15 +147,42 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
       if (membersError) throw membersError;
 
       const userIds = [...new Set((membersData || []).map(m => m.user_id))];
-      let profilesMap: Record<string, string> = {};
+      let profilesMap: Record<string, PlayerProfile> = {};
       if (userIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('user_id, username, display_name, name, email')
+          .select('user_id, username, display_name, name, email, phone_number, avatar_url, game_id')
           .in('user_id', userIds);
 
         (profiles || []).forEach(p => {
-          profilesMap[p.user_id] = p.display_name || p.username || p.name || p.email || 'Unknown';
+          profilesMap[p.user_id] = {
+            username: p.username || undefined,
+            display_name: p.display_name || undefined,
+            name: p.name || undefined,
+            email: p.email || undefined,
+            phone_number: p.phone_number || undefined,
+            avatar_url: p.avatar_url || undefined,
+            game_id: p.game_id || undefined,
+          };
+        });
+      }
+
+      // Load registration data for these users in this tournament
+      let registrationMap: Record<string, RegistrationData> = {};
+      if (userIds.length > 0) {
+        const { data: regs } = await supabase
+          .from('tournament_registrations')
+          .select('user_id, game_id, player_name, custom_fields_data, payment_status')
+          .eq('tournament_id', tournamentId)
+          .in('user_id', userIds);
+
+        (regs || []).forEach(r => {
+          registrationMap[r.user_id] = {
+            game_id: r.game_id,
+            player_name: r.player_name,
+            custom_fields_data: r.custom_fields_data as Record<string, any> || undefined,
+            payment_status: r.payment_status || undefined,
+          };
         });
       }
 
@@ -99,13 +206,17 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
           .map(m => {
             const key = `${team.id}_${m.user_id}`;
             const existing = pointsMap[key];
+            const profile = profilesMap[m.user_id];
+            const playerName = profile?.display_name || profile?.username || profile?.name || profile?.email || 'Unknown Player';
             return {
               user_id: m.user_id,
-              player_name: profilesMap[m.user_id] || 'Unknown Player',
+              player_name: playerName,
               role: m.role,
               points: existing?.points || 0,
               kills: existing?.kills || 0,
               wins: existing?.wins || 0,
+              profile: profile,
+              registration: registrationMap[m.user_id],
             };
           });
 
@@ -140,12 +251,16 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
   const expandAll = () => setExpandedTeams(new Set(teams.map(t => t.id)));
   const collapseAll = () => setExpandedTeams(new Set());
 
-  const updatePlayerField = (teamId: string, userId: string, field: 'points' | 'kills' | 'wins', value: number) => {
+  const updatePlayerField = (teamId: string, userId: string, field: 'kills' | 'wins', value: number) => {
     setTeams(prev => prev.map(team => {
       if (team.id !== teamId) return team;
-      const members = team.members.map(m =>
-        m.user_id === userId ? { ...m, [field]: value } : m
-      );
+      const members = team.members.map(m => {
+        if (m.user_id !== userId) return m;
+        const updated = { ...m, [field]: value };
+        // Auto-calculate points
+        updated.points = updated.kills * killPointsValue + updated.wins * winPointsValue;
+        return updated;
+      });
       return {
         ...team,
         members,
@@ -248,6 +363,70 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
 
   return (
     <div className="space-y-4">
+      {/* Point Multiplier Settings */}
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-foreground flex items-center gap-2 text-base">
+              <Settings className="w-4 h-4 text-primary" />
+              Point Multiplier Settings
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSettings(!showSettings)}
+              className="text-xs"
+            >
+              {showSettings ? 'Hide' : 'Configure'}
+            </Button>
+          </div>
+          {!showSettings && (
+            <p className="text-xs text-muted-foreground mt-1">
+              1 Kill = <span className="text-primary font-bold">{killPointsValue}</span> pts · 1 Win = <span className="text-primary font-bold">{winPointsValue}</span> pts
+            </p>
+          )}
+        </CardHeader>
+        {showSettings && (
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
+                  <Crosshair className="w-3.5 h-3.5 text-red-400" /> Points per Kill
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={killPointsValue}
+                  onChange={e => setKillPointsValue(parseInt(e.target.value) || 0)}
+                  className="bg-secondary border-border text-foreground h-9"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
+                  <Award className="w-3.5 h-3.5 text-yellow-400" /> Points per Win
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={winPointsValue}
+                  onChange={e => setWinPointsValue(parseInt(e.target.value) || 0)}
+                  className="bg-secondary border-border text-foreground h-9"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-3 mt-4">
+              <Button onClick={savePointSettings} disabled={savingSettings} size="sm" className="bg-primary hover:bg-primary/90">
+                {savingSettings ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
+                Save & Recalculate
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Formula: <span className="text-foreground font-mono">(Kills × {killPointsValue}) + (Wins × {winPointsValue}) = Total Points</span>
+              </p>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="bg-card border-border">
@@ -306,7 +485,7 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                 Registered Teams & Player Points
               </CardTitle>
               <CardDescription className="mt-1">
-                Manage individual player scores — team totals auto-calculate
+                Manage kills & wins — points auto-calculate using multipliers
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -365,90 +544,115 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="ml-4 sm:ml-10 mt-1 mb-2 border border-border rounded-lg overflow-hidden bg-card/50">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-border bg-secondary/30 hover:bg-secondary/30">
-                        <TableHead className="text-muted-foreground text-xs font-semibold">Player</TableHead>
-                        <TableHead className="text-muted-foreground text-xs font-semibold">Role</TableHead>
-                        <TableHead className="text-muted-foreground text-xs font-semibold w-24">
-                          <div className="flex items-center gap-1"><Trophy className="w-3 h-3 text-green-400" /> Points</div>
-                        </TableHead>
-                        <TableHead className="text-muted-foreground text-xs font-semibold w-24">
-                          <div className="flex items-center gap-1"><Crosshair className="w-3 h-3 text-red-400" /> Kills</div>
-                        </TableHead>
-                        <TableHead className="text-muted-foreground text-xs font-semibold w-24">
-                          <div className="flex items-center gap-1"><Award className="w-3 h-3 text-yellow-400" /> Wins</div>
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {team.members.map(member => (
-                        <TableRow key={member.user_id} className="border-border hover:bg-secondary/20">
-                          <TableCell className="py-2">
+                  {/* Player Details Cards */}
+                  {team.members.map(member => (
+                    <div key={member.user_id} className="border-b border-border last:border-b-0">
+                      {/* Player Info Row */}
+                      <div className="p-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                        {/* Avatar + Name */}
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            {member.profile?.avatar_url ? (
+                              <img src={member.profile.avatar_url} className="w-9 h-9 rounded-full object-cover" alt="" />
+                            ) : (
+                              <User className="w-4 h-4 text-primary" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-                                <User className="w-3.5 h-3.5 text-primary" />
-                              </div>
-                              <span className="text-foreground text-sm font-medium">{member.player_name}</span>
+                              <span className="text-foreground text-sm font-semibold truncate">{member.player_name}</span>
+                              <Badge
+                                variant="outline"
+                                className={
+                                  member.role === 'captain'
+                                    ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 text-[10px] h-4 px-1'
+                                    : 'border-border text-muted-foreground text-[10px] h-4 px-1'
+                                }
+                              >
+                                {member.role === 'captain' ? '👑 Captain' : member.role}
+                              </Badge>
                             </div>
-                          </TableCell>
-                          <TableCell className="py-2">
-                            <Badge
-                              variant="outline"
-                              className={
-                                member.role === 'captain'
-                                  ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 text-xs'
-                                  : 'border-border text-muted-foreground text-xs'
-                              }
-                            >
-                              {member.role === 'captain' ? '👑 Captain' : member.role}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="py-2">
-                            <Input
-                              type="number"
-                              value={member.points}
-                              onChange={e => updatePlayerField(team.id, member.user_id, 'points', parseInt(e.target.value) || 0)}
-                              className="bg-secondary border-border text-foreground w-20 h-8 text-sm text-center"
-                            />
-                          </TableCell>
-                          <TableCell className="py-2">
+                            {/* Profile & Registration details */}
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                              {member.registration?.game_id && (
+                                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                  <Gamepad className="w-3 h-3" /> {member.registration.game_id}
+                                </span>
+                              )}
+                              {member.profile?.email && (
+                                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                  <Mail className="w-3 h-3" /> {member.profile.email}
+                                </span>
+                              )}
+                              {member.profile?.phone_number && (
+                                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                  <Phone className="w-3 h-3" /> {member.profile.phone_number}
+                                </span>
+                              )}
+                            </div>
+                            {/* Custom registration fields */}
+                            {member.registration?.custom_fields_data && Object.keys(member.registration.custom_fields_data).filter(k => !k.startsWith('rejection_')).length > 0 && (
+                              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                                {Object.entries(member.registration.custom_fields_data)
+                                  .filter(([key]) => !key.startsWith('rejection_'))
+                                  .map(([key, value]) => (
+                                    <span key={key} className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                      <Info className="w-3 h-3" />
+                                      <span className="capitalize">{key.replace(/_/g, ' ')}:</span> <span className="text-foreground">{String(value)}</span>
+                                    </span>
+                                  ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Kills, Wins, Points inputs */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="text-center">
+                            <label className="text-[10px] text-red-400 flex items-center gap-0.5 justify-center mb-0.5">
+                              <Crosshair className="w-2.5 h-2.5" /> Kills
+                            </label>
                             <Input
                               type="number"
                               value={member.kills}
                               onChange={e => updatePlayerField(team.id, member.user_id, 'kills', parseInt(e.target.value) || 0)}
-                              className="bg-secondary border-border text-foreground w-20 h-8 text-sm text-center"
+                              className="bg-secondary border-border text-foreground w-16 h-8 text-sm text-center"
                             />
-                          </TableCell>
-                          <TableCell className="py-2">
+                          </div>
+                          <div className="text-center">
+                            <label className="text-[10px] text-yellow-400 flex items-center gap-0.5 justify-center mb-0.5">
+                              <Award className="w-2.5 h-2.5" /> Wins
+                            </label>
                             <Input
                               type="number"
                               value={member.wins}
                               onChange={e => updatePlayerField(team.id, member.user_id, 'wins', parseInt(e.target.value) || 0)}
-                              className="bg-secondary border-border text-foreground w-20 h-8 text-sm text-center"
+                              className="bg-secondary border-border text-foreground w-16 h-8 text-sm text-center"
                             />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {/* Team Total Row */}
-                      <TableRow className="border-border bg-primary/5 hover:bg-primary/5">
-                        <TableCell colSpan={2} className="py-2.5">
-                          <span className="text-primary font-bold text-sm flex items-center gap-1.5">
-                            <Hash className="w-3.5 h-3.5" /> Team Total
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-2.5">
-                          <span className="text-green-400 font-bold text-base">{team.totalPoints}</span>
-                        </TableCell>
-                        <TableCell className="py-2.5">
-                          <span className="text-red-400 font-bold text-base">{team.totalKills}</span>
-                        </TableCell>
-                        <TableCell className="py-2.5">
-                          <span className="text-yellow-400 font-bold text-base">{team.totalWins}</span>
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
+                          </div>
+                          <div className="text-center">
+                            <label className="text-[10px] text-green-400 flex items-center gap-0.5 justify-center mb-0.5">
+                              <Trophy className="w-2.5 h-2.5" /> Points
+                            </label>
+                            <div className="bg-green-500/10 border border-green-500/20 rounded-md w-16 h-8 flex items-center justify-center">
+                              <span className="text-green-400 font-bold text-sm">{member.points}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {/* Team Total Row */}
+                  <div className="bg-primary/5 px-3 py-2.5 flex items-center justify-between">
+                    <span className="text-primary font-bold text-sm flex items-center gap-1.5">
+                      <Hash className="w-3.5 h-3.5" /> Team Total
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-red-400 font-bold text-sm">{team.totalKills} kills</span>
+                      <span className="text-yellow-400 font-bold text-sm">{team.totalWins} wins</span>
+                      <span className="text-green-400 font-bold text-base">{team.totalPoints} pts</span>
+                    </div>
+                  </div>
                 </div>
               </CollapsibleContent>
             </Collapsible>
