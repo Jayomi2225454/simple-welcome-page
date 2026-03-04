@@ -56,7 +56,7 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
   const { toast } = useToast();
   const walletMode = mode === 'sports' ? 'sports' : 'esports';
   
-  const [gameId, setGameId] = useState('');
+  
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
   const [loadingFields, setLoadingFields] = useState(true);
@@ -206,7 +206,6 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!gameId.trim()) return;
     for (const field of customFields) {
       if (field.is_required && !customFieldValues[field.field_name]?.trim()) return;
     }
@@ -216,8 +215,7 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
     let screenshotUrl: string | undefined;
     if (screenshot) screenshotUrl = await uploadScreenshot();
 
-    onSubmit({ gameId: gameId.trim(), customFields: customFieldValues, screenshotUrl, paidViaWallet: payViaWallet });
-    setGameId('');
+    onSubmit({ gameId: '', customFields: customFieldValues, screenshotUrl, paidViaWallet: payViaWallet });
     setCustomFieldValues({});
     setScreenshot(null);
     setScreenshotPreview('');
@@ -271,7 +269,6 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
   };
 
   const isFormValid = () => {
-    if (!gameId.trim()) return false;
     for (const field of customFields) {
       if (field.is_required && !customFieldValues[field.field_name]?.trim()) return false;
     }
@@ -280,7 +277,7 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
     return true;
   };
 
-  const totalFields = 1 + customFields.length; // gameId + custom fields
+  const totalFields = customFields.length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -311,9 +308,11 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
                 {isPaid ? <CreditCard className="w-3.5 h-3.5 mr-1.5" /> : <CheckCircle className="w-3.5 h-3.5 mr-1.5" />}
                 {isPaid ? `Entry Fee: ₹${entryFee}` : 'Free Entry'}
               </Badge>
-              <Badge variant="outline" className="border-gray-600 text-gray-400 px-3 py-1 text-xs">
-                {totalFields} {totalFields === 1 ? 'field' : 'fields'} to fill
-              </Badge>
+              {totalFields > 0 && (
+                <Badge variant="outline" className="border-gray-600 text-gray-400 px-3 py-1 text-xs">
+                  {totalFields} {totalFields === 1 ? 'field' : 'fields'} to fill
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -328,30 +327,9 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
         ) : (
           <form onSubmit={handleSubmit}>
             <div className="space-y-5 px-6 py-4">
-              {/* Game ID Field - Always present */}
-              <div className="space-y-2">
-                <Label htmlFor="gameId" className="text-gray-200 font-medium flex items-center gap-2">
-                  <User className="w-4 h-4 text-purple-400" />
-                  Game ID (In-Game Username) <span className="text-red-400">*</span>
-                </Label>
-                <Input
-                  id="gameId"
-                  value={gameId}
-                  onChange={(e) => setGameId(e.target.value)}
-                  placeholder="Enter your in-game username"
-                  className="bg-gray-800/60 border-gray-600 text-white placeholder-gray-500 h-11 rounded-xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500"
-                  required
-                />
-              </div>
-
               {/* Custom Fields */}
               {customFields.length > 0 && (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 pt-1">
-                    <div className="h-px flex-1 bg-gray-700/50" />
-                    <span className="text-xs text-gray-500 uppercase tracking-wider">Additional Info</span>
-                    <div className="h-px flex-1 bg-gray-700/50" />
-                  </div>
                   {customFields.map((field) => (
                     <div key={field.id} className="space-y-2">
                       <Label className="text-gray-200 font-medium">
