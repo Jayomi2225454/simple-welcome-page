@@ -325,30 +325,9 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
         ) : (
           <form onSubmit={handleSubmit}>
             <div className="space-y-5 px-6 py-4">
-              {/* Game ID Field - Always present */}
-              <div className="space-y-2">
-                <Label htmlFor="gameId" className="text-gray-200 font-medium flex items-center gap-2">
-                  <User className="w-4 h-4 text-purple-400" />
-                  Game ID (In-Game Username) <span className="text-red-400">*</span>
-                </Label>
-                <Input
-                  id="gameId"
-                  value={gameId}
-                  onChange={(e) => setGameId(e.target.value)}
-                  placeholder="Enter your in-game username"
-                  className="bg-gray-800/60 border-gray-600 text-white placeholder-gray-500 h-11 rounded-xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500"
-                  required
-                />
-              </div>
-
               {/* Custom Fields */}
               {customFields.length > 0 && (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 pt-1">
-                    <div className="h-px flex-1 bg-gray-700/50" />
-                    <span className="text-xs text-gray-500 uppercase tracking-wider">Additional Info</span>
-                    <div className="h-px flex-1 bg-gray-700/50" />
-                  </div>
                   {customFields.map((field) => (
                     <div key={field.id} className="space-y-2">
                       <Label className="text-gray-200 font-medium">
