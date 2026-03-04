@@ -235,6 +235,12 @@ const Profile = () => {
                             ID: {profile.game_id}
                           </Badge>
                         )}
+                        {profile?.in_game_name && (
+                          <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/50 px-4 py-1.5">
+                            <Gamepad2 className="w-4 h-4 mr-2" />
+                            IGN: {profile.in_game_name}
+                          </Badge>
+                        )}
                         <Badge className="bg-green-500/20 text-green-400 border border-green-500/50 px-4 py-1.5">
                           <Trophy className="w-4 h-4 mr-2" />
                           ₹{earnings} earned
