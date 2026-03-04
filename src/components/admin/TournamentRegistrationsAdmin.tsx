@@ -652,6 +652,98 @@ const TournamentRegistrationsAdmin = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Registration Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="bg-gray-900 border border-gray-700 max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center">
+              <Edit className="w-5 h-5 mr-2 text-blue-500" />
+              Edit Registration
+            </DialogTitle>
+          </DialogHeader>
+          
+          {editingRegistration && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-gray-300">Player Name</Label>
+                <Input
+                  value={editPlayerName}
+                  onChange={(e) => setEditPlayerName(e.target.value)}
+                  className="bg-gray-800 border-gray-700 text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-gray-300">Game ID</Label>
+                <Input
+                  value={editGameId}
+                  onChange={(e) => setEditGameId(e.target.value)}
+                  className="bg-gray-800 border-gray-700 text-white"
+                />
+              </div>
+
+              {/* Custom Fields */}
+              {(customFieldDefs.length > 0 || Object.keys(editFormData).length > 0) && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 pt-1">
+                    <div className="h-px flex-1 bg-gray-700" />
+                    <span className="text-xs text-gray-500 uppercase tracking-wider">Custom Fields</span>
+                    <div className="h-px flex-1 bg-gray-700" />
+                  </div>
+                  
+                  {/* Render fields from definitions first */}
+                  {customFieldDefs.map((def) => (
+                    <div key={def.field_name} className="space-y-1">
+                      <Label className="text-gray-300 text-sm">{def.field_label}</Label>
+                      <Input
+                        value={editFormData[def.field_name] || ''}
+                        onChange={(e) => setEditFormData(prev => ({ ...prev, [def.field_name]: e.target.value }))}
+                        className="bg-gray-800 border-gray-700 text-white"
+                      />
+                    </div>
+                  ))}
+                  
+                  {/* Render any extra fields not in definitions */}
+                  {Object.keys(editFormData)
+                    .filter(key => !customFieldDefs.some(d => d.field_name === key))
+                    .map((key) => (
+                      <div key={key} className="space-y-1">
+                        <Label className="text-gray-300 text-sm">{key.replace(/_/g, ' ')}</Label>
+                        <Input
+                          value={editFormData[key] || ''}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, [key]: e.target.value }))}
+                          className="bg-gray-800 border-gray-700 text-white"
+                        />
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setEditDialogOpen(false)}
+              className="border-gray-600 text-gray-300"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={savingEdit}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {savingEdit ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-1" />
+              )}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
