@@ -269,7 +269,6 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
   };
 
   const isFormValid = () => {
-    if (!gameId.trim()) return false;
     for (const field of customFields) {
       if (field.is_required && !customFieldValues[field.field_name]?.trim()) return false;
     }
@@ -278,7 +277,7 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
     return true;
   };
 
-  const totalFields = 1 + customFields.length; // gameId + custom fields
+  const totalFields = customFields.length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
