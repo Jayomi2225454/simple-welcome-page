@@ -112,13 +112,14 @@ const Profile = () => {
     }
     
     if (data) {
-      setProfile(data);
+      setProfile(data as UserProfile);
       setFormData({
         first_name: data.first_name || '',
         last_name: data.last_name || '',
         display_name: data.display_name || '',
         phone_number: data.phone_number || '',
         game_id: data.game_id || '',
+        in_game_name: (data as any).in_game_name || '',
       });
     }
   };
