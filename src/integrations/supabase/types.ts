@@ -491,6 +491,7 @@ export type Database = {
           first_name: string | null
           game_id: string | null
           id: string
+          in_game_name: string | null
           last_name: string | null
           name: string | null
           phone_number: string | null
@@ -507,6 +508,7 @@ export type Database = {
           first_name?: string | null
           game_id?: string | null
           id?: string
+          in_game_name?: string | null
           last_name?: string | null
           name?: string | null
           phone_number?: string | null
@@ -523,6 +525,7 @@ export type Database = {
           first_name?: string | null
           game_id?: string | null
           id?: string
+          in_game_name?: string | null
           last_name?: string | null
           name?: string | null
           phone_number?: string | null
