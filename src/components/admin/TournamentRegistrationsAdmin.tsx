@@ -438,6 +438,15 @@ const TournamentRegistrationsAdmin = () => {
                       </div>
                       <div className="flex items-center space-x-3">
                         {getStatusBadge(registration.payment_status)}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEditDialog(registration)}
+                          className="border-blue-500 text-blue-400 hover:bg-blue-500/20"
+                        >
+                          <Edit className="w-4 h-4 mr-1" />
+                          Edit
+                        </Button>
                       </div>
                     </div>
                     
