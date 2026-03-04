@@ -35,6 +35,7 @@ interface UserProfile {
   email: string | null;
   phone_number: string | null;
   game_id: string | null;
+  in_game_name: string | null;
   avatar_url: string | null;
   earnings: number | null;
 }
