@@ -169,7 +169,7 @@ const TournamentRegistrationComponent: React.FC<TournamentRegistrationProps> = (
       const registrationData = {
         tournament_id: tournament.id,
         player_name: userProfile.display_name || userProfile.username || user?.email || 'Unknown Player',
-        game_id: data.gameId,
+        game_id: data.gameId || userProfile?.in_game_name || userProfile?.game_id || 'N/A',
         payment_amount: entryFeeAmount,
         payment_screenshot_url: data.screenshotUrl,
         custom_fields_data: data.customFields
