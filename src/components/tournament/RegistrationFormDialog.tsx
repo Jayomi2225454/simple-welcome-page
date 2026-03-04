@@ -56,7 +56,7 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
   const { toast } = useToast();
   const walletMode = mode === 'sports' ? 'sports' : 'esports';
   
-  const [gameId, setGameId] = useState('');
+  
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
   const [loadingFields, setLoadingFields] = useState(true);
