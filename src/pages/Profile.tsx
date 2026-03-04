@@ -346,6 +346,16 @@ const Profile = () => {
                               className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
                             />
                           </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="in_game_name" className="text-gray-400">In Game Name</Label>
+                            <Input
+                              id="in_game_name"
+                              value={formData.in_game_name}
+                              onChange={(e) => setFormData({ ...formData, in_game_name: e.target.value })}
+                              placeholder="Your in-game name / IGN"
+                              className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                            />
+                          </div>
                           <Button 
                             onClick={handleSave}
                             disabled={saving}
