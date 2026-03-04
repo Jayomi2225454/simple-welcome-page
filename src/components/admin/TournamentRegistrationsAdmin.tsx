@@ -246,6 +246,72 @@ const TournamentRegistrationsAdmin = () => {
     return screenshotUrls[registration.id] || null;
   };
 
+  const openEditDialog = async (registration: Registration) => {
+    setEditingRegistration(registration);
+    setEditPlayerName(registration.player_name);
+    setEditGameId(registration.game_id);
+    
+    // Extract custom fields data (excluding rejection_ keys)
+    const cfData = registration.custom_fields_data || {};
+    const cleanData: Record<string, string> = {};
+    Object.entries(cfData).forEach(([key, value]) => {
+      if (!key.startsWith('rejection_')) {
+        cleanData[key] = String(value);
+      }
+    });
+    setEditFormData(cleanData);
+    
+    // Load custom field definitions for labels
+    if (selectedTournament) {
+      const { data } = await supabase
+        .from('tournament_custom_fields')
+        .select('field_name, field_label, field_type')
+        .eq('tournament_id', selectedTournament)
+        .order('display_order', { ascending: true });
+      setCustomFieldDefs(data || []);
+    }
+    
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRegistration) return;
+    setSavingEdit(true);
+    try {
+      // Preserve rejection data
+      const existingData = editingRegistration.custom_fields_data || {};
+      const rejectionData: Record<string, any> = {};
+      Object.entries(existingData).forEach(([key, value]) => {
+        if (key.startsWith('rejection_')) {
+          rejectionData[key] = value;
+        }
+      });
+
+      const updatedCustomFields = { ...editFormData, ...rejectionData };
+
+      const { error } = await supabase
+        .from('tournament_registrations')
+        .update({
+          player_name: editPlayerName,
+          game_id: editGameId,
+          custom_fields_data: updatedCustomFields
+        })
+        .eq('id', editingRegistration.id);
+
+      if (error) throw error;
+
+      toast({ title: 'Updated', description: 'Registration updated successfully' });
+      setEditDialogOpen(false);
+      setEditingRegistration(null);
+      loadRegistrations();
+    } catch (error) {
+      console.error('Error updating registration:', error);
+      toast({ title: 'Error', description: 'Failed to update registration', variant: 'destructive' });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const selectedTournamentData = tournaments.find(t => t.id === selectedTournament);
 
   return (
