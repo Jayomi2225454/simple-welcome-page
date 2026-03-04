@@ -308,9 +308,11 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
                 {isPaid ? <CreditCard className="w-3.5 h-3.5 mr-1.5" /> : <CheckCircle className="w-3.5 h-3.5 mr-1.5" />}
                 {isPaid ? `Entry Fee: ₹${entryFee}` : 'Free Entry'}
               </Badge>
-              <Badge variant="outline" className="border-gray-600 text-gray-400 px-3 py-1 text-xs">
-                {totalFields} {totalFields === 1 ? 'field' : 'fields'} to fill
-              </Badge>
+              {totalFields > 0 && (
+                <Badge variant="outline" className="border-gray-600 text-gray-400 px-3 py-1 text-xs">
+                  {totalFields} {totalFields === 1 ? 'field' : 'fields'} to fill
+                </Badge>
+              )}
             </div>
           </div>
         </div>
