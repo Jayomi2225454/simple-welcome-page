@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Check, X, Users, Settings2, Image, ExternalLink, Loader2, MessageSquare } from 'lucide-react';
+import { Check, X, Users, Settings2, Image, ExternalLink, Loader2, MessageSquare, Edit, Save } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import TournamentCustomFieldsAdmin from './TournamentCustomFieldsAdmin';
@@ -46,6 +47,15 @@ const TournamentRegistrationsAdmin = () => {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectingRegistration, setRejectingRegistration] = useState<Registration | null>(null);
   const [rejectComment, setRejectComment] = useState('');
+  
+  // Edit dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingRegistration, setEditingRegistration] = useState<Registration | null>(null);
+  const [editFormData, setEditFormData] = useState<Record<string, string>>({});
+  const [editPlayerName, setEditPlayerName] = useState('');
+  const [editGameId, setEditGameId] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [customFieldDefs, setCustomFieldDefs] = useState<{ field_name: string; field_label: string; field_type: string }[]>([]);
   
   const { toast } = useToast();
 
@@ -236,6 +246,72 @@ const TournamentRegistrationsAdmin = () => {
     return screenshotUrls[registration.id] || null;
   };
 
+  const openEditDialog = async (registration: Registration) => {
+    setEditingRegistration(registration);
+    setEditPlayerName(registration.player_name);
+    setEditGameId(registration.game_id);
+    
+    // Extract custom fields data (excluding rejection_ keys)
+    const cfData = registration.custom_fields_data || {};
+    const cleanData: Record<string, string> = {};
+    Object.entries(cfData).forEach(([key, value]) => {
+      if (!key.startsWith('rejection_')) {
+        cleanData[key] = String(value);
+      }
+    });
+    setEditFormData(cleanData);
+    
+    // Load custom field definitions for labels
+    if (selectedTournament) {
+      const { data } = await supabase
+        .from('tournament_custom_fields')
+        .select('field_name, field_label, field_type')
+        .eq('tournament_id', selectedTournament)
+        .order('display_order', { ascending: true });
+      setCustomFieldDefs(data || []);
+    }
+    
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRegistration) return;
+    setSavingEdit(true);
+    try {
+      // Preserve rejection data
+      const existingData = editingRegistration.custom_fields_data || {};
+      const rejectionData: Record<string, any> = {};
+      Object.entries(existingData).forEach(([key, value]) => {
+        if (key.startsWith('rejection_')) {
+          rejectionData[key] = value;
+        }
+      });
+
+      const updatedCustomFields = { ...editFormData, ...rejectionData };
+
+      const { error } = await supabase
+        .from('tournament_registrations')
+        .update({
+          player_name: editPlayerName,
+          game_id: editGameId,
+          custom_fields_data: updatedCustomFields
+        })
+        .eq('id', editingRegistration.id);
+
+      if (error) throw error;
+
+      toast({ title: 'Updated', description: 'Registration updated successfully' });
+      setEditDialogOpen(false);
+      setEditingRegistration(null);
+      loadRegistrations();
+    } catch (error) {
+      console.error('Error updating registration:', error);
+      toast({ title: 'Error', description: 'Failed to update registration', variant: 'destructive' });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const selectedTournamentData = tournaments.find(t => t.id === selectedTournament);
 
   return (
@@ -362,6 +438,15 @@ const TournamentRegistrationsAdmin = () => {
                       </div>
                       <div className="flex items-center space-x-3">
                         {getStatusBadge(registration.payment_status)}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEditDialog(registration)}
+                          className="border-blue-500 text-blue-400 hover:bg-blue-500/20"
+                        >
+                          <Edit className="w-4 h-4 mr-1" />
+                          Edit
+                        </Button>
                       </div>
                     </div>
                     
@@ -565,6 +650,98 @@ const TournamentRegistrationsAdmin = () => {
               />
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Registration Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="bg-gray-900 border border-gray-700 max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center">
+              <Edit className="w-5 h-5 mr-2 text-blue-500" />
+              Edit Registration
+            </DialogTitle>
+          </DialogHeader>
+          
+          {editingRegistration && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-gray-300">Player Name</Label>
+                <Input
+                  value={editPlayerName}
+                  onChange={(e) => setEditPlayerName(e.target.value)}
+                  className="bg-gray-800 border-gray-700 text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-gray-300">Game ID</Label>
+                <Input
+                  value={editGameId}
+                  onChange={(e) => setEditGameId(e.target.value)}
+                  className="bg-gray-800 border-gray-700 text-white"
+                />
+              </div>
+
+              {/* Custom Fields */}
+              {(customFieldDefs.length > 0 || Object.keys(editFormData).length > 0) && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 pt-1">
+                    <div className="h-px flex-1 bg-gray-700" />
+                    <span className="text-xs text-gray-500 uppercase tracking-wider">Custom Fields</span>
+                    <div className="h-px flex-1 bg-gray-700" />
+                  </div>
+                  
+                  {/* Render fields from definitions first */}
+                  {customFieldDefs.map((def) => (
+                    <div key={def.field_name} className="space-y-1">
+                      <Label className="text-gray-300 text-sm">{def.field_label}</Label>
+                      <Input
+                        value={editFormData[def.field_name] || ''}
+                        onChange={(e) => setEditFormData(prev => ({ ...prev, [def.field_name]: e.target.value }))}
+                        className="bg-gray-800 border-gray-700 text-white"
+                      />
+                    </div>
+                  ))}
+                  
+                  {/* Render any extra fields not in definitions */}
+                  {Object.keys(editFormData)
+                    .filter(key => !customFieldDefs.some(d => d.field_name === key))
+                    .map((key) => (
+                      <div key={key} className="space-y-1">
+                        <Label className="text-gray-300 text-sm">{key.replace(/_/g, ' ')}</Label>
+                        <Input
+                          value={editFormData[key] || ''}
+                          onChange={(e) => setEditFormData(prev => ({ ...prev, [key]: e.target.value }))}
+                          className="bg-gray-800 border-gray-700 text-white"
+                        />
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setEditDialogOpen(false)}
+              className="border-gray-600 text-gray-300"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={savingEdit}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {savingEdit ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-1" />
+              )}
+              Save Changes
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

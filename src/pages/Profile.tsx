@@ -35,6 +35,7 @@ interface UserProfile {
   email: string | null;
   phone_number: string | null;
   game_id: string | null;
+  in_game_name: string | null;
   avatar_url: string | null;
   earnings: number | null;
 }
@@ -70,6 +71,7 @@ const Profile = () => {
     display_name: '',
     phone_number: '',
     game_id: '',
+    in_game_name: '',
   });
 
   useEffect(() => {
@@ -110,13 +112,14 @@ const Profile = () => {
     }
     
     if (data) {
-      setProfile(data);
+      setProfile(data as UserProfile);
       setFormData({
         first_name: data.first_name || '',
         last_name: data.last_name || '',
         display_name: data.display_name || '',
         phone_number: data.phone_number || '',
         game_id: data.game_id || '',
+        in_game_name: (data as any).in_game_name || '',
       });
     }
   };
@@ -232,6 +235,12 @@ const Profile = () => {
                             ID: {profile.game_id}
                           </Badge>
                         )}
+                        {profile?.in_game_name && (
+                          <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/50 px-4 py-1.5">
+                            <Gamepad2 className="w-4 h-4 mr-2" />
+                            IGN: {profile.in_game_name}
+                          </Badge>
+                        )}
                         <Badge className="bg-green-500/20 text-green-400 border border-green-500/50 px-4 py-1.5">
                           <Trophy className="w-4 h-4 mr-2" />
                           ₹{earnings} earned
@@ -264,9 +273,15 @@ const Profile = () => {
                         <p className="text-white font-medium">{profile?.game_id || 'Not set'}</p>
                       </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-purple-400 mb-1">Display Name</p>
-                      <p className="text-white font-medium">{profile?.display_name || 'Not set'}</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-purple-400 mb-1">Display Name</p>
+                        <p className="text-white font-medium">{profile?.display_name || 'Not set'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-purple-400 mb-1">In Game Name</p>
+                        <p className="text-white font-medium">{profile?.in_game_name || 'Not set'}</p>
+                      </div>
                     </div>
                     <div className="border-t border-gray-700 pt-4">
                       <p className="text-xs text-purple-400 mb-1">Email</p>
@@ -334,6 +349,16 @@ const Profile = () => {
                               value={formData.game_id}
                               onChange={(e) => setFormData({ ...formData, game_id: e.target.value })}
                               placeholder="Your game ID"
+                              className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="in_game_name" className="text-gray-400">In Game Name</Label>
+                            <Input
+                              id="in_game_name"
+                              value={formData.in_game_name}
+                              onChange={(e) => setFormData({ ...formData, in_game_name: e.target.value })}
+                              placeholder="Your in-game name / IGN"
                               className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
                             />
                           </div>
