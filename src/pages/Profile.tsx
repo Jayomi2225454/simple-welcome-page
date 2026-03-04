@@ -267,9 +267,15 @@ const Profile = () => {
                         <p className="text-white font-medium">{profile?.game_id || 'Not set'}</p>
                       </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-purple-400 mb-1">Display Name</p>
-                      <p className="text-white font-medium">{profile?.display_name || 'Not set'}</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-purple-400 mb-1">Display Name</p>
+                        <p className="text-white font-medium">{profile?.display_name || 'Not set'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-purple-400 mb-1">In Game Name</p>
+                        <p className="text-white font-medium">{profile?.in_game_name || 'Not set'}</p>
+                      </div>
                     </div>
                     <div className="border-t border-gray-700 pt-4">
                       <p className="text-xs text-purple-400 mb-1">Email</p>
