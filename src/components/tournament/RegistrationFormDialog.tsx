@@ -206,7 +206,6 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!gameId.trim()) return;
     for (const field of customFields) {
       if (field.is_required && !customFieldValues[field.field_name]?.trim()) return;
     }
@@ -216,8 +215,7 @@ const RegistrationFormDialog: React.FC<RegistrationFormDialogProps> = ({
     let screenshotUrl: string | undefined;
     if (screenshot) screenshotUrl = await uploadScreenshot();
 
-    onSubmit({ gameId: gameId.trim(), customFields: customFieldValues, screenshotUrl, paidViaWallet: payViaWallet });
-    setGameId('');
+    onSubmit({ gameId: '', customFields: customFieldValues, screenshotUrl, paidViaWallet: payViaWallet });
     setCustomFieldValues({});
     setScreenshot(null);
     setScreenshotPreview('');
