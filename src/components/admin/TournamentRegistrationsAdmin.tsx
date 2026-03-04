@@ -48,6 +48,15 @@ const TournamentRegistrationsAdmin = () => {
   const [rejectingRegistration, setRejectingRegistration] = useState<Registration | null>(null);
   const [rejectComment, setRejectComment] = useState('');
   
+  // Edit dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingRegistration, setEditingRegistration] = useState<Registration | null>(null);
+  const [editFormData, setEditFormData] = useState<Record<string, string>>({});
+  const [editPlayerName, setEditPlayerName] = useState('');
+  const [editGameId, setEditGameId] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [customFieldDefs, setCustomFieldDefs] = useState<{ field_name: string; field_label: string; field_type: string }[]>([]);
+  
   const { toast } = useToast();
 
   useEffect(() => {
