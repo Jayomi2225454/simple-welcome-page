@@ -71,6 +71,7 @@ const Profile = () => {
     display_name: '',
     phone_number: '',
     game_id: '',
+    in_game_name: '',
   });
 
   useEffect(() => {
