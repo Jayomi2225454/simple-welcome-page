@@ -293,10 +293,10 @@ const TournamentDetail = () => {
               <TournamentTimer tournament={tournament} />
               
               <Tabs defaultValue="overview" className="w-full">
-                <TabsList className={`grid w-full ${tournament.team_size === '1v1' ? 'grid-cols-7' : 'grid-cols-6'} bg-gray-800 hover-scale`}>
+                <TabsList className={`grid w-full ${(tournament as any).team_mode === '1v1' ? 'grid-cols-7' : 'grid-cols-6'} bg-gray-800 hover-scale`}>
                   <TabsTrigger value="overview" className="transition-all duration-200 hover:scale-105">Overview</TabsTrigger>
                   <TabsTrigger value="register" className="transition-all duration-200 hover:scale-105">Register</TabsTrigger>
-                  {tournament.team_size === '1v1' && (
+                  {(tournament as any).team_mode === '1v1' && (
                     <TabsTrigger value="matches" className="transition-all duration-200 hover:scale-105">
                       <Swords className="w-4 h-4 mr-1" />
                       Matches
@@ -315,7 +315,7 @@ const TournamentDetail = () => {
                   <TournamentRegistrationComponent tournament={tournament} />
                 </TabsContent>
 
-                {tournament.team_size === '1v1' && (
+                {(tournament as any).team_mode === '1v1' && (
                   <TabsContent value="matches" className="mt-6">
                     <TournamentMatchScores tournamentId={tournament.id} />
                   </TabsContent>
