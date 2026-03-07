@@ -241,6 +241,22 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
                   </div>
                   
                   <div className="space-y-2">
+                    <Label htmlFor="signup-phone" className="text-white">Phone Number</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="signup-phone"
+                        type="tel"
+                        placeholder="Enter your phone number"
+                        className="pl-10 bg-gray-700/50 border-gray-600 text-white"
+                        value={signupData.phoneNumber}
+                        onChange={(e) => setSignupData({ ...signupData, phoneNumber: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label htmlFor="game-user-id" className="text-white">Game User ID</Label>
                     <div className="relative">
                       <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
