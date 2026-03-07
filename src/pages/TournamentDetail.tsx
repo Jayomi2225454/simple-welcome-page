@@ -11,6 +11,7 @@ import TournamentTimer from '@/components/tournament/TournamentTimer';
 import PrizeDistribution from '@/components/tournament/PrizeDistribution';
 import SponsorsSection from '@/components/tournament/SponsorsSection';
 import TournamentPointsTable from '@/components/tournament/TournamentPointsTable';
+import TournamentMatchScores from '@/components/tournament/TournamentMatchScores';
 import { useGameStore } from '@/store/gameStore';
 import { supabase } from '@/integrations/supabase/client';
 
