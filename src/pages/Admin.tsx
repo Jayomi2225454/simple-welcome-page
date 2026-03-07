@@ -240,6 +240,7 @@ const Admin = () => {
         ? 'Free' 
         : `₹${tournamentForm.entry_fee}`;
 
+      const is1v1 = tournamentForm.team_size === '1v1';
       const tournamentData = {
         ...tournamentForm,
         max_participants: parseInt(tournamentForm.max_participants),
@@ -252,6 +253,8 @@ const Admin = () => {
         start_time: tournamentForm.start_time || undefined,
         end_time: tournamentForm.end_time || undefined,
         entry_fee: entryFee,
+        team_size: is1v1 ? '1' : tournamentForm.team_size,
+        team_mode: is1v1 ? '1v1' : tournamentForm.team_size,
         registration_opens: tournamentForm.registration_opens ? new Date(tournamentForm.registration_opens).toISOString() : undefined,
         registration_closes: tournamentForm.registration_closes ? new Date(tournamentForm.registration_closes).toISOString() : undefined,
         winners: tournamentForm.winners || undefined,
