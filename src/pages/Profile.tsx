@@ -283,9 +283,15 @@ const Profile = () => {
                         <p className="text-white font-medium">{profile?.in_game_name || 'Not set'}</p>
                       </div>
                     </div>
-                    <div className="border-t border-gray-700 pt-4">
-                      <p className="text-xs text-purple-400 mb-1">Email</p>
-                      <p className="text-white font-medium">{user.email}</p>
+                    <div className="grid grid-cols-2 gap-4 border-t border-gray-700 pt-4">
+                      <div>
+                        <p className="text-xs text-purple-400 mb-1">Email</p>
+                        <p className="text-white font-medium">{user.email}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-purple-400 mb-1">Phone</p>
+                        <p className="text-white font-medium">{profile?.phone_number || 'Not set'}</p>
+                      </div>
                     </div>
                     
                     <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>

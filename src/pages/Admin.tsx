@@ -772,6 +772,7 @@ const Admin = () => {
                           <SelectValue placeholder="Select team size" />
                         </SelectTrigger>
                         <SelectContent className="bg-gray-700 border-gray-600">
+                          <SelectItem value="1v1">1v1 (1 vs 1)</SelectItem>
                           <SelectItem value="1">Solo (1 Player)</SelectItem>
                           <SelectItem value="2">Duo (2 Players)</SelectItem>
                           <SelectItem value="4">Squad (4 Players)</SelectItem>

@@ -12,7 +12,7 @@ import { Mail, Lock, User, Phone } from 'lucide-react';
 const Auth = forwardRef<HTMLDivElement>((_, ref) => {
   const [isLoading, setIsLoading] = useState(false);
   const [loginData, setLoginData] = useState({ email: '', password: '' });
-  const [signupData, setSignupData] = useState({ email: '', password: '', name: '', gameUserId: '' });
+  const [signupData, setSignupData] = useState({ email: '', password: '', name: '', gameUserId: '', phoneNumber: '' });
   
   const { signIn, signUp, signInWithGoogle, user } = useAuth();
   const { toast } = useToast();
