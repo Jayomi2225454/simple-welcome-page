@@ -383,7 +383,7 @@ const Admin = () => {
       entry_fee: isFree ? '' : entryFeeValue.replace(/[^0-9]/g, ''),
       region: tournament.region || '',
       format: tournament.format || '',
-      team_size: tournament.team_size || '',
+      team_size: (tournament as any).team_mode === '1v1' ? '1v1' : (tournament.team_size || ''),
       team_payment_mode: (tournament.team_payment_mode || 'each_pays') as 'each_pays' | 'leader_pays',
       organizer: tournament.organizer || '',
       rules: tournament.rules || '',
