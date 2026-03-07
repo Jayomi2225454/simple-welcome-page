@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Calendar, Users, MapPin, Clock, Trophy, ArrowLeft, Gamepad, Crown, Medal, Award, PlayCircle, CheckCircle, Timer, TableIcon } from 'lucide-react';
+import { Calendar, Users, MapPin, Clock, Trophy, ArrowLeft, Gamepad, Crown, Medal, Award, PlayCircle, CheckCircle, Timer, TableIcon, Swords } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
