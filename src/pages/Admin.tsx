@@ -240,6 +240,7 @@ const Admin = () => {
         ? 'Free' 
         : `₹${tournamentForm.entry_fee}`;
 
+      const is1v1 = tournamentForm.team_size === '1v1';
       const tournamentData = {
         ...tournamentForm,
         max_participants: parseInt(tournamentForm.max_participants),
@@ -252,6 +253,8 @@ const Admin = () => {
         start_time: tournamentForm.start_time || undefined,
         end_time: tournamentForm.end_time || undefined,
         entry_fee: entryFee,
+        team_size: is1v1 ? '1' : tournamentForm.team_size,
+        team_mode: is1v1 ? '1v1' : tournamentForm.team_size,
         registration_opens: tournamentForm.registration_opens ? new Date(tournamentForm.registration_opens).toISOString() : undefined,
         registration_closes: tournamentForm.registration_closes ? new Date(tournamentForm.registration_closes).toISOString() : undefined,
         winners: tournamentForm.winners || undefined,
@@ -380,7 +383,7 @@ const Admin = () => {
       entry_fee: isFree ? '' : entryFeeValue.replace(/[^0-9]/g, ''),
       region: tournament.region || '',
       format: tournament.format || '',
-      team_size: tournament.team_size || '',
+      team_size: (tournament as any).team_mode === '1v1' ? '1v1' : (tournament.team_size || ''),
       team_payment_mode: (tournament.team_payment_mode || 'each_pays') as 'each_pays' | 'leader_pays',
       organizer: tournament.organizer || '',
       rules: tournament.rules || '',
@@ -772,6 +775,7 @@ const Admin = () => {
                           <SelectValue placeholder="Select team size" />
                         </SelectTrigger>
                         <SelectContent className="bg-gray-700 border-gray-600">
+                          <SelectItem value="1v1">1v1 (1 vs 1)</SelectItem>
                           <SelectItem value="1">Solo (1 Player)</SelectItem>
                           <SelectItem value="2">Duo (2 Players)</SelectItem>
                           <SelectItem value="4">Squad (4 Players)</SelectItem>

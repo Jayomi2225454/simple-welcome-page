@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Calendar, Users, MapPin, Clock, Trophy, ArrowLeft, Gamepad, Crown, Medal, Award, PlayCircle, CheckCircle, Timer, TableIcon } from 'lucide-react';
+import { Calendar, Users, MapPin, Clock, Trophy, ArrowLeft, Gamepad, Crown, Medal, Award, PlayCircle, CheckCircle, Timer, TableIcon, Swords } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -11,6 +11,7 @@ import TournamentTimer from '@/components/tournament/TournamentTimer';
 import PrizeDistribution from '@/components/tournament/PrizeDistribution';
 import SponsorsSection from '@/components/tournament/SponsorsSection';
 import TournamentPointsTable from '@/components/tournament/TournamentPointsTable';
+import TournamentMatchScores from '@/components/tournament/TournamentMatchScores';
 import { useGameStore } from '@/store/gameStore';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -292,9 +293,15 @@ const TournamentDetail = () => {
               <TournamentTimer tournament={tournament} />
               
               <Tabs defaultValue="overview" className="w-full">
-                <TabsList className="grid w-full grid-cols-6 bg-gray-800 hover-scale">
+                <TabsList className={`grid w-full ${(tournament as any).team_mode === '1v1' ? 'grid-cols-7' : 'grid-cols-6'} bg-gray-800 hover-scale`}>
                   <TabsTrigger value="overview" className="transition-all duration-200 hover:scale-105">Overview</TabsTrigger>
                   <TabsTrigger value="register" className="transition-all duration-200 hover:scale-105">Register</TabsTrigger>
+                  {(tournament as any).team_mode === '1v1' && (
+                    <TabsTrigger value="matches" className="transition-all duration-200 hover:scale-105">
+                      <Swords className="w-4 h-4 mr-1" />
+                      Matches
+                    </TabsTrigger>
+                  )}
                   <TabsTrigger value="points" className="transition-all duration-200 hover:scale-105">
                     <TableIcon className="w-4 h-4 mr-1" />
                     Points
@@ -307,6 +314,12 @@ const TournamentDetail = () => {
                 <TabsContent value="register" className="mt-6">
                   <TournamentRegistrationComponent tournament={tournament} />
                 </TabsContent>
+
+                {(tournament as any).team_mode === '1v1' && (
+                  <TabsContent value="matches" className="mt-6">
+                    <TournamentMatchScores tournamentId={tournament.id} />
+                  </TabsContent>
+                )}
                 
                 <TabsContent value="overview" className="mt-6">
                   <div className="space-y-6">

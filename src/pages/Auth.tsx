@@ -6,13 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Lock, User } from 'lucide-react';
+import { Mail, Lock, User, Phone } from 'lucide-react';
 
 const Auth = forwardRef<HTMLDivElement>((_, ref) => {
   const [isLoading, setIsLoading] = useState(false);
   const [loginData, setLoginData] = useState({ email: '', password: '' });
-  const [signupData, setSignupData] = useState({ email: '', password: '', name: '', gameUserId: '' });
+  const [signupData, setSignupData] = useState({ email: '', password: '', name: '', gameUserId: '', phoneNumber: '' });
   
   const { signIn, signUp, signInWithGoogle, user } = useAuth();
   const { toast } = useToast();
@@ -61,6 +62,16 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
 
     try {
       const { error } = await signUp(signupData.email, signupData.password, signupData.name, signupData.gameUserId);
+      
+      if (!error) {
+        // Update profile with phone number after signup
+        const { data: { user: newUser } } = await supabase.auth.getUser();
+        if (newUser) {
+          await supabase.from('profiles').update({ 
+            phone_number: signupData.phoneNumber 
+          }).eq('user_id', newUser.id);
+        }
+      }
       
       if (error) {
         toast({
@@ -240,6 +251,22 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
                     </div>
                   </div>
                   
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-phone" className="text-white">Phone Number</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="signup-phone"
+                        type="tel"
+                        placeholder="Enter your phone number"
+                        className="pl-10 bg-gray-700/50 border-gray-600 text-white"
+                        value={signupData.phoneNumber}
+                        onChange={(e) => setSignupData({ ...signupData, phoneNumber: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="game-user-id" className="text-white">Game User ID</Label>
                     <div className="relative">
