@@ -62,6 +62,16 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
     try {
       const { error } = await signUp(signupData.email, signupData.password, signupData.name, signupData.gameUserId);
       
+      if (!error) {
+        // Update profile with phone number after signup
+        const { data: { user: newUser } } = await supabase.auth.getUser();
+        if (newUser) {
+          await supabase.from('profiles').update({ 
+            phone_number: signupData.phoneNumber 
+          }).eq('user_id', newUser.id);
+        }
+      }
+      
       if (error) {
         toast({
           title: "Signup Failed",
