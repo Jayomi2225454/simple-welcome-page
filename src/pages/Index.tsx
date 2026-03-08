@@ -30,19 +30,19 @@ const Index = () => {
   const stats = [
     {
       label: 'Tournaments',
-      value: '500+',
+      value: '10+',
       icon: Trophy,
       color: 'text-purple-400',
     },
     {
       label: 'Players',
-      value: '50k+',
+      value: '1k+',
       icon: Users,
       color: 'text-blue-400',
     },
     {
       label: 'Prize Pool',
-      value: '₹1M+',
+      value: '₹10K+',
       icon: DollarSign,
       color: 'text-green-400',
     },
