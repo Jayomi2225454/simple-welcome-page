@@ -12,7 +12,7 @@ import { Mail, Lock, User, Phone } from 'lucide-react';
 
 const Auth = forwardRef<HTMLDivElement>((_, ref) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [loginData, setLoginData] = useState({ email: '', password: '' });
+  const [loginData, setLoginData] = useState({ emailOrPhone: '', password: '' });
   const [signupData, setSignupData] = useState({ email: '', password: '', name: '', gameUserId: '', phoneNumber: '' });
   
   const { signIn, signUp, signInWithGoogle, user } = useAuth();
@@ -30,7 +30,30 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
     setIsLoading(true);
 
     try {
-      const { error } = await signIn(loginData.email, loginData.password);
+      let email = loginData.emailOrPhone.trim();
+      
+      // If input looks like a phone number, look up the email from profiles
+      const isPhone = /^[\d+\-\s()]+$/.test(email) && email.replace(/\D/g, '').length >= 7;
+      if (isPhone) {
+        const { data: profile, error: lookupError } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('phone_number', email)
+          .maybeSingle();
+        
+        if (lookupError || !profile?.email) {
+          toast({
+            title: "Login Failed",
+            description: "No account found with this phone number.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+        email = profile.email;
+      }
+
+      const { error } = await signIn(email, loginData.password);
       
       if (error) {
         toast({
@@ -123,16 +146,16 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="login-email" className="text-white">Email</Label>
+                    <Label htmlFor="login-email" className="text-white">Email / Phone Number</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                       <Input
                         id="login-email"
-                        type="email"
-                        placeholder="Enter your email"
+                        type="text"
+                        placeholder="Enter your email or phone number"
                         className="pl-10 bg-gray-700/50 border-gray-600 text-white"
-                        value={loginData.email}
-                        onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                        value={loginData.emailOrPhone}
+                        onChange={(e) => setLoginData({ ...loginData, emailOrPhone: e.target.value })}
                         required
                       />
                     </div>
