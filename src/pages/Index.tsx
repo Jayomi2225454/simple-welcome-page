@@ -1,6 +1,7 @@
 
 import { Link } from 'react-router-dom';
 import { Trophy, Users, DollarSign, Gamepad2, ArrowRight, PlayCircle, Clock, Zap, UserCheck, Building, Target } from 'lucide-react';
+import LiveMatchScoreBadge from '@/components/tournament/LiveMatchScoreBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import Layout from '@/components/layout/Layout';
@@ -173,6 +174,10 @@ const Index = () => {
                     <span className="px-2 py-1 bg-blue-500/90 text-white text-xs font-medium rounded-full">
                       Entry: Free
                     </span>
+                  </div>
+                  {/* Live 1v1 Score */}
+                  <div className="absolute bottom-3 left-3">
+                    <LiveMatchScoreBadge tournamentId={tournament.id} />
                   </div>
                 </div>
                 

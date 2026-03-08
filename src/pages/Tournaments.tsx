@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import Layout from '@/components/layout/Layout';
 import TournamentCardTimer from '@/components/tournament/TournamentCardTimer';
+import LiveMatchScoreBadge from '@/components/tournament/LiveMatchScoreBadge';
 import { useGameStore } from '@/store/gameStore';
 
 const Tournaments = () => {
@@ -249,8 +250,9 @@ const Tournaments = () => {
                   </div>
                 )}
 
-                {/* Countdown Timer */}
+                {/* Live 1v1 Scores */}
                 <div className="absolute bottom-4 left-4">
+                  <LiveMatchScoreBadge tournamentId={tournament.id} />
                   <TournamentCardTimer tournament={tournament} />
                 </div>
                 
