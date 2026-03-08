@@ -990,6 +990,14 @@ const Admin = () => {
                         onTimerUpdate={() => initialize()}
                       />
                     </div>
+
+                    {/* 1v1 Match Scores (only for 1v1 tournaments) */}
+                    {(tournament as any).team_mode === '1v1' && (
+                      <TournamentMatchScoresAdmin
+                        tournamentId={tournament.id}
+                        gameName={tournament.game}
+                      />
+                    )}
                   </CardContent>
                 </Card>
               ))}
