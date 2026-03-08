@@ -280,8 +280,8 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
       const members = team.members.map(m => {
         if (m.user_id !== userId) return m;
         const updated = { ...m, [field]: value };
-        // Auto-calculate points
-        updated.points = updated.kills * killPointsValue + updated.wins * winPointsValue;
+        // Auto-calculate points: kills × multiplier + position bonus
+        updated.points = updated.kills * killPointsValue + getPositionBonus(updated.wins);
         return updated;
       });
       return {
