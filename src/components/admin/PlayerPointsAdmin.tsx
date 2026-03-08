@@ -60,6 +60,7 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
   const [showSettings, setShowSettings] = useState(false);
   const [killPointsValue, setKillPointsValue] = useState(1);
   const [winPointsValue, setWinPointsValue] = useState(1);
+  const [positionPoints, setPositionPoints] = useState<{ position: number; points: number }[]>([]);
   const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
