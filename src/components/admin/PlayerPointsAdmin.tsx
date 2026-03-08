@@ -414,31 +414,17 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
         </CardHeader>
         {showSettings && (
           <CardContent className="pt-0">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
-                  <Crosshair className="w-3.5 h-3.5 text-red-400" /> Points per Kill
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={killPointsValue}
-                  onChange={e => setKillPointsValue(parseInt(e.target.value) || 0)}
-                  className="bg-secondary border-border text-foreground h-9"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
-                  <Award className="w-3.5 h-3.5 text-yellow-400" /> Points per Win
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={winPointsValue}
-                  onChange={e => setWinPointsValue(parseInt(e.target.value) || 0)}
-                  className="bg-secondary border-border text-foreground h-9"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
+                <Crosshair className="w-3.5 h-3.5 text-red-400" /> Points per Kill
+              </Label>
+              <Input
+                type="number"
+                min={0}
+                value={killPointsValue}
+                onChange={e => setKillPointsValue(parseInt(e.target.value) || 0)}
+                className="bg-secondary border-border text-foreground h-9"
+              />
             </div>
 
             {/* Position Points Section */}
