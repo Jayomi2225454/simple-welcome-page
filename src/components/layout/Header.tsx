@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, User, Menu, X, LogOut, Settings, MessageCircle, Phone, Mail, Home, Shield } from 'lucide-react';
+import { Search, User, Menu, X, LogOut, Settings, MessageCircle, Phone, Mail, Home, Shield, Headphones } from 'lucide-react';
+import LiveSupportChat from '@/components/chat/LiveSupportChat';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMode } from '@/contexts/ModeContext';
@@ -12,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showLiveChat, setShowLiveChat] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut, loading } = useAuth();
@@ -229,6 +231,13 @@ const Header = () => {
                   <DropdownMenuSeparator className="bg-gray-700" />
                   <DropdownMenuItem 
                     className="text-gray-300 hover:text-white hover:bg-gray-700 cursor-pointer"
+                    onClick={() => setShowLiveChat(true)}
+                  >
+                    <Headphones className="mr-2 h-4 w-4" />
+                    <span>Live Support</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    className="text-gray-300 hover:text-white hover:bg-gray-700 cursor-pointer"
                     onClick={handleWhatsAppSupport}
                   >
                     <MessageCircle className="mr-2 h-4 w-4" />
@@ -322,6 +331,9 @@ const Header = () => {
           </div>
         )}
       </div>
+      {showLiveChat && (
+        <LiveSupportChat isOpen={showLiveChat} onClose={() => setShowLiveChat(false)} />
+      )}
     </header>
   );
 };

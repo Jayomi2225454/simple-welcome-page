@@ -2,7 +2,7 @@ import { ReactNode, forwardRef, useState, useEffect } from 'react';
 import Header from './Header';
 import Footer from './Footer';
 import AIChatbot from '@/components/chat/AIChatbot';
-import LiveSupportChat from '@/components/chat/LiveSupportChat';
+
 import { supabase } from '@/integrations/supabase/client';
 
 interface LayoutProps {
@@ -41,7 +41,7 @@ const Layout = forwardRef<HTMLDivElement, LayoutProps>(({ children }, ref) => {
       <main className="flex-1">{children}</main>
       <Footer />
       {chatbotEnabled && <AIChatbot />}
-      <LiveSupportChat />
+      
     </div>
   );
 });
