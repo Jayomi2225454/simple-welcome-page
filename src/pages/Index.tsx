@@ -291,10 +291,10 @@ const Index = () => {
             </Button>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {players.slice(0, 4).map((player, index) => (
               <Card key={player.id} className="bg-gray-800/50 border-gray-700 hover:border-purple-500/50 transition-all duration-300">
-                <CardContent className="p-6 text-center">
+                <CardContent className="p-3 sm:p-4 md:p-6 text-center">
                   <div className="relative mb-4">
                     <img 
                       src={player.avatar} 
