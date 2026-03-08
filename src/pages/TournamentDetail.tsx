@@ -297,8 +297,8 @@ const TournamentDetail = () => {
                   <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">Overview</TabsTrigger>
                   <TabsTrigger value="register" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">Register</TabsTrigger>
                   {(tournament as any).team_mode === '1v1' && (
-                    <TabsTrigger value="matches" className="transition-all duration-200 hover:scale-105">
-                      <Swords className="w-4 h-4 mr-1" />
+                    <TabsTrigger value="matches" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">
+                      <Swords className="w-3 h-3 sm:w-4 sm:h-4 mr-0.5 sm:mr-1" />
                       Matches
                     </TabsTrigger>
                   )}
