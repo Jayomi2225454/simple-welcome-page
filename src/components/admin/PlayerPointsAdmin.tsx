@@ -124,11 +124,16 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
     setPositionPoints(prev => prev.map((p, i) => i === index ? { ...p, [field]: value } : p));
   };
 
+  const getPositionBonus = (position: number) => {
+    const entry = positionPoints.find(p => p.position === position);
+    return entry ? entry.points : 0;
+  };
+
   const recalculateAllPoints = () => {
     setTeams(prev => prev.map(team => {
       const members = team.members.map(m => ({
         ...m,
-        points: m.kills * killPointsValue + m.wins * winPointsValue,
+        points: m.kills * killPointsValue + getPositionBonus(m.wins),
       }));
       return {
         ...team,
