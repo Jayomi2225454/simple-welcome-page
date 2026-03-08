@@ -601,9 +601,9 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                       <Crosshair className="w-3 h-3 text-red-400" />
                       <span className="text-red-400 font-bold text-sm">{team.totalKills}</span>
                     </div>
-                    <div className="hidden sm:flex items-center gap-1.5 bg-yellow-500/10 rounded-md px-2.5 py-1">
-                      <Award className="w-3 h-3 text-yellow-400" />
-                      <span className="text-yellow-400 font-bold text-sm">{team.totalWins}</span>
+                    <div className="hidden sm:flex items-center gap-1.5 bg-amber-500/10 rounded-md px-2.5 py-1">
+                      <Medal className="w-3 h-3 text-amber-400" />
+                      <span className="text-amber-400 font-bold text-sm">#{team.totalWins || '-'}</span>
                     </div>
                   </div>
                 </div>
