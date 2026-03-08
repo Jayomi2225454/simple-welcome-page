@@ -123,12 +123,12 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
   return (
     <div ref={ref} className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
+        <div className="text-center mb-8 mt-8">
+          <div className="flex items-center justify-center mb-6">
             <img 
               src="/lovable-uploads/b263082d-907f-4305-88f6-cda9b8e2ecac.png" 
               alt="Battle Mitra Logo" 
-              className="w-28 h-28 object-contain"
+              className="w-36 h-36 object-contain"
             />
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">Battle Mitra</h1>
