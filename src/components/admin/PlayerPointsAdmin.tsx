@@ -410,11 +410,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                 <> · <span className="text-amber-400 font-bold">{positionPoints.length}</span> position bonuses configured</>
               )}
             </p>
-          )}
-                <> · <span className="text-amber-400 font-bold">{positionPoints.length}</span> position bonuses</>
-              )}
-            </p>
-          )}
         </CardHeader>
         {showSettings && (
           <CardContent className="pt-0">
