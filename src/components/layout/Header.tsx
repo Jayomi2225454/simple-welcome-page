@@ -229,33 +229,39 @@ const Header = () => {
                     </>
                   )}
                   <DropdownMenuSeparator className="bg-gray-700" />
+                  <DropdownMenuLabel className="text-gray-500 text-[10px] uppercase tracking-wider font-semibold px-2 py-1">
+                    Support
+                  </DropdownMenuLabel>
                   <DropdownMenuItem 
-                    className="text-gray-300 hover:text-white hover:bg-gray-700 cursor-pointer"
+                    className="cursor-pointer bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/30 rounded-lg mx-1 mb-1 text-white hover:from-blue-600/30 hover:to-purple-600/30 hover:text-white"
                     onClick={() => setShowLiveChat(true)}
                   >
-                    <Headphones className="mr-2 h-4 w-4" />
-                    <span>Live Support</span>
+                    <Headphones className="mr-2 h-4 w-4 text-blue-400" />
+                    <span className="font-medium">Live Support</span>
+                    <span className="ml-auto text-[10px] font-bold bg-green-500 text-white px-1.5 py-0.5 rounded-full animate-pulse">
+                      LIVE
+                    </span>
                   </DropdownMenuItem>
                   <DropdownMenuItem 
                     className="text-gray-300 hover:text-white hover:bg-gray-700 cursor-pointer"
                     onClick={handleWhatsAppSupport}
                   >
-                    <MessageCircle className="mr-2 h-4 w-4" />
-                    <span>WhatsApp Support</span>
+                    <MessageCircle className="mr-2 h-4 w-4 text-green-400" />
+                    <span>WhatsApp</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem 
                     className="text-gray-300 hover:text-white hover:bg-gray-700 cursor-pointer"
                     onClick={handleCallSupport}
                   >
-                    <Phone className="mr-2 h-4 w-4" />
-                    <span>Call Support</span>
+                    <Phone className="mr-2 h-4 w-4 text-sky-400" />
+                    <span>Call Us</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem 
                     className="text-gray-300 hover:text-white hover:bg-gray-700 cursor-pointer"
                     onClick={handleEmailSupport}
                   >
-                    <Mail className="mr-2 h-4 w-4" />
-                    <span>Email Support</span>
+                    <Mail className="mr-2 h-4 w-4 text-orange-400" />
+                    <span>Email</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-gray-700" />
                   <DropdownMenuItem 
