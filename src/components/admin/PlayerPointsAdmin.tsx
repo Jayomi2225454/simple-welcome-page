@@ -279,6 +279,88 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
   const expandAll = () => setExpandedTeams(new Set(teams.map(t => t.id)));
   const collapseAll = () => setExpandedTeams(new Set());
 
+  // Keep teamsRef in sync
+  useEffect(() => {
+    teamsRef.current = teams;
+  }, [teams]);
+
+  const autoSave = useCallback(async () => {
+    if (!isDirtyRef.current) return;
+    const currentTeams = teamsRef.current;
+    setSaveStatus('saving');
+    try {
+      for (const team of currentTeams) {
+        for (const member of team.members) {
+          const { error } = await supabase
+            .from('tournament_player_points')
+            .upsert({
+              tournament_id: tournamentId,
+              team_id: team.id,
+              user_id: member.user_id,
+              player_name: member.player_name,
+              points: member.points,
+              kills: member.kills,
+              wins: member.wins,
+            }, { onConflict: 'tournament_id,team_id,user_id' });
+          if (error) throw error;
+        }
+
+        const { data: existing } = await supabase
+          .from('tournament_points')
+          .select('id')
+          .eq('tournament_id', tournamentId)
+          .eq('team_id', team.id)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase
+            .from('tournament_points')
+            .update({
+              points: team.totalPoints,
+              kills: team.totalKills,
+              wins: team.totalWins,
+            })
+            .eq('id', existing.id);
+        } else {
+          await supabase
+            .from('tournament_points')
+            .insert({
+              tournament_id: tournamentId,
+              team_id: team.id,
+              team_name: team.team_name,
+              points: team.totalPoints,
+              kills: team.totalKills,
+              wins: team.totalWins,
+              position: 1,
+            });
+        }
+      }
+      isDirtyRef.current = false;
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (error: any) {
+      console.error('Auto-save error:', error);
+      setSaveStatus('idle');
+      toast({ title: 'Auto-save failed', description: error.message, variant: 'destructive' });
+    }
+  }, [tournamentId, toast]);
+
+  const triggerAutoSave = useCallback(() => {
+    isDirtyRef.current = true;
+    setSaveStatus('idle');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      autoSave();
+    }, 1500);
+  }, [autoSave]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
   const updatePlayerField = (teamId: string, userId: string, field: 'kills' | 'wins', value: number) => {
     setTeams(prev => prev.map(team => {
       if (team.id !== teamId) return team;
@@ -297,9 +379,8 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
         totalWins: members.reduce((s, m) => s + m.wins, 0),
       };
     }));
+    triggerAutoSave();
   };
-
-  const handleSaveAll = async () => {
     setSaving(true);
     try {
       for (const team of teams) {
