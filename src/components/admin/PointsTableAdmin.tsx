@@ -982,97 +982,42 @@ const PointsTableAdmin = () => {
                       <TableRow key={entry.id} className="border-gray-700">
                         <TableCell className="text-white font-bold">#{entry.position}</TableCell>
                         <TableCell>
-                          {editingEntry === entry.id ? (
-                            <Input
-                              value={entry.team_name}
-                              onChange={(e) => {
-                                setPointsEntries(prev => prev.map(p => 
-                                  p.id === entry.id ? { ...p, team_name: e.target.value } : p
-                                ));
-                              }}
-                              className="bg-gray-700 border-gray-600 text-white"
-                            />
-                          ) : (
-                            <span className="text-white">{entry.team_name}</span>
-                          )}
+                          <Input
+                            value={entry.team_name}
+                            onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)}
+                            className="bg-gray-700 border-gray-600 text-white"
+                          />
                         </TableCell>
                         <TableCell>
-                          {editingEntry === entry.id ? (
-                            <Input
-                              type="number"
-                              value={entry.points}
-                              onChange={(e) => {
-                                setPointsEntries(prev => prev.map(p => 
-                                  p.id === entry.id ? { ...p, points: parseInt(e.target.value) || 0 } : p
-                                ));
-                              }}
-                              className="bg-gray-700 border-gray-600 text-white w-20"
-                            />
-                          ) : (
-                            <span className="text-green-400 font-semibold">{entry.points}</span>
-                          )}
+                          <Input
+                            type="number"
+                            value={entry.points}
+                            onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)}
+                            className="bg-gray-700 border-gray-600 text-white w-20"
+                          />
                         </TableCell>
                         <TableCell>
-                          {editingEntry === entry.id ? (
-                            <Input
-                              type="number"
-                              value={entry.kills}
-                              onChange={(e) => {
-                                setPointsEntries(prev => prev.map(p => 
-                                  p.id === entry.id ? { ...p, kills: parseInt(e.target.value) || 0 } : p
-                                ));
-                              }}
-                              className="bg-gray-700 border-gray-600 text-white w-20"
-                            />
-                          ) : (
-                            <span className="text-red-400">{entry.kills}</span>
-                          )}
+                          <Input
+                            type="number"
+                            value={entry.kills}
+                            onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)}
+                            className="bg-gray-700 border-gray-600 text-white w-20"
+                          />
                         </TableCell>
                         <TableCell>
-                          {editingEntry === entry.id ? (
-                            <Input
-                              type="number"
-                              value={entry.wins}
-                              onChange={(e) => {
-                                setPointsEntries(prev => prev.map(p => 
-                                  p.id === entry.id ? { ...p, wins: parseInt(e.target.value) || 0 } : p
-                                ));
-                              }}
-                              className="bg-gray-700 border-gray-600 text-white w-20"
-                            />
-                          ) : (
-                            <span className="text-yellow-400">{entry.wins}</span>
-                          )}
+                          <Input
+                            type="number"
+                            value={entry.wins}
+                            onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)}
+                            className="bg-gray-700 border-gray-600 text-white w-20"
+                          />
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
-                            {editingEntry === entry.id ? (
-                              <Button
-                                size="sm"
-                                onClick={() => handleUpdateEntry(entry.id!, {
-                                  team_name: entry.team_name,
-                                  points: entry.points,
-                                  kills: entry.kills,
-                                  wins: entry.wins,
-                                })}
-                                className="bg-green-500 hover:bg-green-600"
-                              >
-                                <Save className="w-4 h-4" />
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                onClick={() => setEditingEntry(entry.id!)}
-                                className="bg-blue-500 hover:bg-blue-600"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              onClick={() => handleDeleteEntry(entry.id!)}
-                              className="bg-red-500 hover:bg-red-600"
-                            >
+                          <Button
+                            size="sm"
+                            onClick={() => handleDeleteEntry(entry.id!)}
+                            className="bg-red-500 hover:bg-red-600"
+                          >
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
