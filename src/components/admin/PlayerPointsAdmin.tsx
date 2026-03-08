@@ -74,12 +74,16 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
     try {
       const { data } = await supabase
         .from('tournaments')
-        .select('kill_points_value, win_points_value')
+        .select('kill_points_value, win_points_value, position_points')
         .eq('id', tournamentId)
         .single();
       if (data) {
         setKillPointsValue((data as any).kill_points_value ?? 1);
         setWinPointsValue((data as any).win_points_value ?? 1);
+        const pp = (data as any).position_points;
+        if (Array.isArray(pp) && pp.length > 0) {
+          setPositionPoints(pp);
+        }
       }
     } catch (e) {
       console.error('Error loading point settings:', e);
