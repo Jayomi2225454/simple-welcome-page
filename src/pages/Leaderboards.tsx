@@ -186,7 +186,7 @@ const Leaderboards = () => {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="py-4">
+                    <TableCell className="py-4 hidden sm:table-cell">
                       <div className="flex items-center gap-3">
                         <div className="flex-1">
                           <Progress 
@@ -199,7 +199,7 @@ const Leaderboards = () => {
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="py-4">
+                    <TableCell className="py-4 hidden md:table-cell">
                       <div className="text-purple-400 font-semibold">
                         {player.tournaments_won} wins
                       </div>

@@ -209,7 +209,7 @@ const Tournaments = () => {
         </Card>
 
         {/* Tournament Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {filteredTournaments.map((tournament) => (
             <Card key={tournament.id} className="bg-gray-800 border-gray-700 hover:border-purple-500/50 transition-all duration-300 group cursor-pointer">
               <div className="aspect-video relative overflow-hidden rounded-t-lg">
