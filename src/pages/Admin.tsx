@@ -1481,6 +1481,7 @@ const Admin = () => {
           {/* Support Chat Tab */}
           <TabsContent value="support-chat" className="space-y-6">
             <SupportChatAdmin />
+          </TabsContent>
         </Tabs>
       </div>
     </Layout>
