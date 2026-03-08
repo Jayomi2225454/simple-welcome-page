@@ -283,14 +283,14 @@ const Profile = () => {
                         <p className="text-white font-medium">{profile?.in_game_name || 'Not set'}</p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4 border-t border-gray-700 pt-4">
-                      <div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-gray-700 pt-4">
+                      <div className="min-w-0">
                         <p className="text-xs text-purple-400 mb-1">Email</p>
-                        <p className="text-white font-medium">{user.email}</p>
+                        <p className="text-white font-medium truncate">{user.email}</p>
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-xs text-purple-400 mb-1">Phone</p>
-                        <p className="text-white font-medium">{profile?.phone_number || 'Not set'}</p>
+                        <p className="text-white font-medium truncate">{profile?.phone_number || 'Not set'}</p>
                       </div>
                     </div>
                     
