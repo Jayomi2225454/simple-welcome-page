@@ -146,16 +146,16 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="login-email" className="text-white">Email</Label>
+                    <Label htmlFor="login-email" className="text-white">Email / Phone Number</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                       <Input
                         id="login-email"
-                        type="email"
-                        placeholder="Enter your email"
+                        type="text"
+                        placeholder="Enter your email or phone number"
                         className="pl-10 bg-gray-700/50 border-gray-600 text-white"
-                        value={loginData.email}
-                        onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                        value={loginData.emailOrPhone}
+                        onChange={(e) => setLoginData({ ...loginData, emailOrPhone: e.target.value })}
                         required
                       />
                     </div>
