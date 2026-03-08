@@ -1,6 +1,6 @@
 
 import { Link } from 'react-router-dom';
-import { Trophy, Users, DollarSign, Gamepad2, ArrowRight, PlayCircle, Clock, Zap, UserCheck, Building, Target } from 'lucide-react';
+import { Trophy, Users, Gamepad2, ArrowRight, PlayCircle, Clock, Zap, UserCheck, Building, Target } from 'lucide-react';
 import LiveMatchScoreBadge from '@/components/tournament/LiveMatchScoreBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -43,7 +43,8 @@ const Index = () => {
     {
       label: 'Prize Pool',
       value: '₹10K+',
-      icon: DollarSign,
+      icon: null,
+      customIcon: '₹',
       color: 'text-green-400',
     },
     {
@@ -123,7 +124,13 @@ const Index = () => {
             {stats.map((stat) => (
               <Card key={stat.label} className="bg-gray-800/50 border-gray-700 hover:border-purple-500/50 transition-all duration-300">
                 <CardContent className="p-3 sm:p-4 md:p-6 text-center">
-                  <stat.icon className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 mx-auto mb-2 sm:mb-4 ${stat.color}`} />
+                  {stat.customIcon ? (
+                    <div className={`text-4xl sm:text-5xl md:text-6xl font-bold mx-auto mb-2 sm:mb-4 ${stat.color}`}>
+                      {stat.customIcon}
+                    </div>
+                  ) : (
+                    <stat.icon className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 mx-auto mb-2 sm:mb-4 ${stat.color}`} />
+                  )}
                   <div className={`text-xl sm:text-2xl md:text-3xl font-bold mb-1 sm:mb-2 ${stat.color}`}>
                     {stat.value}
                   </div>
