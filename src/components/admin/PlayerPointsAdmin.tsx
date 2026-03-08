@@ -583,6 +583,19 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Auto-save status indicator */}
+              {saveStatus === 'saving' && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
+                  <CloudUpload className="w-3.5 h-3.5" />
+                  <span>Saving...</span>
+                </div>
+              )}
+              {saveStatus === 'saved' && (
+                <div className="flex items-center gap-1.5 text-xs text-green-400">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Saved</span>
+                </div>
+              )}
               <Button onClick={expandAll} variant="ghost" size="sm" className="text-xs h-8 text-muted-foreground">
                 Expand All
               </Button>
@@ -591,10 +604,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
               </Button>
               <Button onClick={loadTeamsAndPlayers} variant="outline" size="sm" className="h-8">
                 <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
-              </Button>
-              <Button onClick={handleSaveAll} disabled={saving} size="sm" className="h-8 bg-primary hover:bg-primary/90">
-                {saving ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
-                Save All
               </Button>
             </div>
           </div>
