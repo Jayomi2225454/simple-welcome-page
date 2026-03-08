@@ -184,9 +184,9 @@ const LiveSupportChat = ({ isOpen, onClose }: LiveSupportChatProps) => {
   if (!user || !isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 pb-6" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/40" onClick={onClose}>
       <div
-        className="w-full max-w-md h-[560px] bg-gray-950 border border-gray-800 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300"
+        className="fixed bottom-6 right-6 z-50 w-[360px] sm:w-[400px] h-[520px] bg-gray-950 border border-gray-800 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
