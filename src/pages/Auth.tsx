@@ -128,7 +128,7 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
             <img 
               src="/lovable-uploads/b263082d-907f-4305-88f6-cda9b8e2ecac.png" 
               alt="Battle Mitra Logo" 
-              className="w-20 h-20 object-contain"
+              className="w-28 h-28 object-contain"
             />
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">Battle Mitra</h1>
