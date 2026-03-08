@@ -1018,9 +1018,8 @@ const PointsTableAdmin = () => {
                             onClick={() => handleDeleteEntry(entry.id!)}
                             className="bg-red-500 hover:bg-red-600"
                           >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
