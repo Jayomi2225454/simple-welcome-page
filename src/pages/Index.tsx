@@ -175,6 +175,10 @@ const Index = () => {
                       Entry: Free
                     </span>
                   </div>
+                  {/* Live 1v1 Score */}
+                  <div className="absolute bottom-3 left-3">
+                    <LiveMatchScoreBadge tournamentId={tournament.id} />
+                  </div>
                 </div>
                 
                 <CardContent className="p-4">

@@ -250,8 +250,9 @@ const Tournaments = () => {
                   </div>
                 )}
 
-                {/* Countdown Timer */}
+                {/* Live 1v1 Scores */}
                 <div className="absolute bottom-4 left-4">
+                  <LiveMatchScoreBadge tournamentId={tournament.id} />
                   <TournamentCardTimer tournament={tournament} />
                 </div>
                 
