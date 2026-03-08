@@ -40,11 +40,11 @@ const Tournaments = () => {
   }).sort((a, b) => {
     switch (sortBy) {
       case 'prize':
-        return parseInt(b.prize_pool.replace(/[^\d]/g, '')) - parseInt(a.prize_pool.replace(/[^\d]/g, ''));
+        return (parseInt((b.prize_pool || '0').replace(/[^\d]/g, '')) || 0) - (parseInt((a.prize_pool || '0').replace(/[^\d]/g, '')) || 0);
       case 'participants':
-        return b.current_participants - a.current_participants;
+        return (b.current_participants || 0) - (a.current_participants || 0);
       case 'date':
-        return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+        return new Date(a.start_date || '').getTime() - new Date(b.start_date || '').getTime();
       case 'newest':
       default:
         return new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime();
