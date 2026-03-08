@@ -120,7 +120,7 @@ const TournamentDetail = () => {
           <div className="absolute inset-0 bg-black/50"></div>
           
           <div className="absolute inset-0 flex flex-col justify-between">
-            <div className="p-6 animate-slide-in-right">
+            <div className="p-3 sm:p-4 md:p-6 animate-slide-in-right">
               <Button 
                 variant="ghost" 
                 size="sm" 
