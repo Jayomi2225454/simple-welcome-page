@@ -486,7 +486,7 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                 Save & Recalculate
               </Button>
               <p className="text-xs text-muted-foreground">
-                Formula: <span className="text-foreground font-mono">(Kills × {killPointsValue}) + (Wins × {winPointsValue}){positionPoints.length > 0 ? ' + Position Bonus' : ''} = Total Points</span>
+                Formula: <span className="text-foreground font-mono">(Kills × {killPointsValue}) + Position Bonus = Total Points</span>
               </p>
             </div>
           </CardContent>
