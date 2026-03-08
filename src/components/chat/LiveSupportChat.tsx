@@ -184,7 +184,7 @@ const LiveSupportChat = ({ isOpen, onClose }: LiveSupportChatProps) => {
 
   if (!user || !isOpen) return null;
 
-  return (
+  const chatWidget = (
     <div className="fixed inset-0 z-50 bg-black/40" onClick={onClose}>
       <div
         className="fixed bottom-6 right-6 z-50 w-[360px] sm:w-[400px] h-[520px] bg-gray-950 border border-gray-800 rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300"
@@ -310,6 +310,8 @@ const LiveSupportChat = ({ isOpen, onClose }: LiveSupportChatProps) => {
       </div>
     </div>
   );
+
+  return createPortal(chatWidget, document.body);
 };
 
 export default LiveSupportChat;
