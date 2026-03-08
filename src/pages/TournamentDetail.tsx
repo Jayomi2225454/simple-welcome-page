@@ -154,7 +154,7 @@ const TournamentDetail = () => {
                 )}
               </div>
               
-              <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
                 {tournament.name}
               </h1>
               
