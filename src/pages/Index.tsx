@@ -1,6 +1,5 @@
 
 import { Link } from 'react-router-dom';
-import { Link } from 'react-router-dom';
 import { Trophy, Users, Gamepad2, ArrowRight, PlayCircle, Clock, Zap, UserCheck, Building, Target } from 'lucide-react';
 import LiveMatchScoreBadge from '@/components/tournament/LiveMatchScoreBadge';
 import { Button } from '@/components/ui/button';
