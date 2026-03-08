@@ -43,7 +43,8 @@ const Index = () => {
     {
       label: 'Prize Pool',
       value: '₹10K+',
-      icon: DollarSign,
+      icon: null,
+      customIcon: '₹',
       color: 'text-green-400',
     },
     {
