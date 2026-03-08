@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, User, Menu, X, LogOut, Settings, MessageCircle, Phone, Mail, Home, Shield } from 'lucide-react';
+import { Search, User, Menu, X, LogOut, Settings, MessageCircle, Phone, Mail, Home, Shield, Headphones } from 'lucide-react';
+import LiveSupportChat from '@/components/chat/LiveSupportChat';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMode } from '@/contexts/ModeContext';
