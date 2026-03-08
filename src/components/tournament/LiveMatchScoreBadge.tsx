@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Swords } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -12,18 +12,27 @@ interface LiveMatch {
 
 const LiveMatchScoreBadge = ({ tournamentId }: { tournamentId: string }) => {
   const [liveMatches, setLiveMatches] = useState<LiveMatch[]>([]);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    const fetch = async () => {
+    if (!tournamentId) return;
+
+    const fetchMatches = async () => {
       const { data } = await supabase
         .from('matches')
         .select('id, player1, player2, player1_score, player2_score')
         .eq('tournament_id', tournamentId)
         .eq('status', 'live');
-      if (data?.length) setLiveMatches(data);
+      setLiveMatches(data || []);
     };
-    fetch();
 
+    // Initial fetch
+    fetchMatches();
+
+    // Polling fallback every 5s
+    intervalRef.current = setInterval(fetchMatches, 5000);
+
+    // Realtime subscription
     const channel = supabase
       .channel(`live-badge-${tournamentId}`)
       .on('postgres_changes', {
@@ -31,10 +40,13 @@ const LiveMatchScoreBadge = ({ tournamentId }: { tournamentId: string }) => {
         schema: 'public',
         table: 'matches',
         filter: `tournament_id=eq.${tournamentId}`,
-      }, () => fetch())
+      }, () => fetchMatches())
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [tournamentId]);
 
   if (!liveMatches.length) return null;
