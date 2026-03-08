@@ -551,7 +551,7 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                 Registered Teams & Player Points
               </CardTitle>
               <CardDescription className="mt-1">
-                Manage kills & wins — points auto-calculate using multipliers
+                Manage kills & position — points auto-calculate: (Kills × {killPointsValue}) + Position Bonus
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
