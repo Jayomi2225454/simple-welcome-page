@@ -432,13 +432,67 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                 />
               </div>
             </div>
+
+            {/* Position Points Section */}
+            <div className="mt-4 pt-4 border-t border-border">
+              <div className="flex items-center justify-between mb-3">
+                <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
+                  <Medal className="w-3.5 h-3.5 text-amber-400" /> Points per Position
+                </Label>
+                <Button onClick={addPositionPoint} variant="outline" size="sm" className="h-7 text-xs">
+                  <Plus className="w-3 h-3 mr-1" /> Add Position
+                </Button>
+              </div>
+              {positionPoints.length > 0 ? (
+                <div className="space-y-2">
+                  {positionPoints
+                    .sort((a, b) => a.position - b.position)
+                    .map((pp, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 min-w-[80px]">
+                          <span className="text-xs text-muted-foreground w-4">#{pp.position}</span>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={pp.position}
+                            onChange={e => updatePositionPoint(index, 'position', parseInt(e.target.value) || 1)}
+                            className="bg-secondary border-border text-foreground h-7 w-16 text-xs"
+                            placeholder="Pos"
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground">=</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={pp.points}
+                          onChange={e => updatePositionPoint(index, 'points', parseInt(e.target.value) || 0)}
+                          className="bg-secondary border-border text-foreground h-7 w-20 text-xs"
+                          placeholder="Points"
+                        />
+                        <span className="text-xs text-muted-foreground">pts</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removePositionPoint(index)}
+                          className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No position points configured. Add positions to award bonus points based on placement.</p>
+              )}
+            </div>
+
             <div className="flex items-center gap-3 mt-4">
               <Button onClick={savePointSettings} disabled={savingSettings} size="sm" className="bg-primary hover:bg-primary/90">
                 {savingSettings ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
                 Save & Recalculate
               </Button>
               <p className="text-xs text-muted-foreground">
-                Formula: <span className="text-foreground font-mono">(Kills × {killPointsValue}) + (Wins × {winPointsValue}) = Total Points</span>
+                Formula: <span className="text-foreground font-mono">(Kills × {killPointsValue}) + (Wins × {winPointsValue}){positionPoints.length > 0 ? ' + Position Bonus' : ''} = Total Points</span>
               </p>
             </div>
           </CardContent>
