@@ -468,18 +468,18 @@ const Index = () => {
       </section>
 
       {/* Join the Battle Mitra Community */}
-      <section className="py-16 bg-gradient-to-br from-purple-900/20 to-blue-900/20">
+      <section className="py-8 sm:py-12 md:py-16 bg-gradient-to-br from-purple-900/20 to-blue-900/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">Join the Battle Mitra Community</h2>
-          <p className="text-gray-300 text-lg mb-12 max-w-3xl mx-auto">
+          <p className="text-gray-300 text-sm sm:text-base md:text-lg mb-6 sm:mb-8 md:mb-12 max-w-3xl mx-auto px-2">
             Be part of an active community of gamers, compete in tournaments, win prizes, and make friends along the way.
           </p>
           
-          <div className="grid md:grid-cols-3 gap-8 mb-12">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8 mb-8 sm:mb-12">
             <Card className="bg-gray-800/50 border-gray-700 hover:border-purple-500/50 transition-all duration-300">
-              <CardContent className="p-8 text-center">
-                <div className="w-16 h-16 bg-purple-500/20 rounded-lg flex items-center justify-center mx-auto mb-6">
-                  <Users className="w-8 h-8 text-purple-400" />
+              <CardContent className="p-5 sm:p-6 md:p-8 text-center">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 bg-purple-500/20 rounded-lg flex items-center justify-center mx-auto mb-4 sm:mb-6">
+                  <Users className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-purple-400" />
                 </div>
                 <h3 className="text-xl font-bold text-white mb-4">Connect with Gamers</h3>
                 <p className="text-gray-400 mb-6">

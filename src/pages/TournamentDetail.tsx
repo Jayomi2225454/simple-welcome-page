@@ -302,13 +302,13 @@ const TournamentDetail = () => {
                       Matches
                     </TabsTrigger>
                   )}
-                  <TabsTrigger value="points" className="transition-all duration-200 hover:scale-105">
-                    <TableIcon className="w-4 h-4 mr-1" />
+                  <TabsTrigger value="points" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">
+                    <TableIcon className="w-3 h-3 sm:w-4 sm:h-4 mr-0.5 sm:mr-1" />
                     Points
                   </TabsTrigger>
-                  <TabsTrigger value="rules" className="transition-all duration-200 hover:scale-105">Rules</TabsTrigger>
-                  <TabsTrigger value="schedule" className="transition-all duration-200 hover:scale-105">Schedule</TabsTrigger>
-                  <TabsTrigger value="prizes" className="transition-all duration-200 hover:scale-105">Prizes</TabsTrigger>
+                  <TabsTrigger value="rules" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">Rules</TabsTrigger>
+                  <TabsTrigger value="schedule" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">Schedule</TabsTrigger>
+                  <TabsTrigger value="prizes" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">Prizes</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="register" className="mt-6">

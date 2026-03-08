@@ -266,7 +266,7 @@ const Tournaments = () => {
                 </div>
               </div>
               
-              <CardContent className="p-6">
+              <CardContent className="p-4 sm:p-5 md:p-6">
                 <h3 className="text-white font-bold text-lg mb-2 group-hover:text-purple-400 transition-colors line-clamp-1">
                   {tournament.name}
                 </h3>
