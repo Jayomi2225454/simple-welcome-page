@@ -1,0 +1,2 @@
+ALTER TABLE public.tournaments DROP CONSTRAINT tournaments_team_mode_check;
+ALTER TABLE public.tournaments ADD CONSTRAINT tournaments_team_mode_check CHECK (team_mode = ANY (ARRAY['solo'::text, 'duo'::text, 'squad'::text, '5-man'::text, '1v1'::text]));
