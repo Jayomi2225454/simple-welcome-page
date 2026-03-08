@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Users, ChevronDown, ChevronRight, Save, Loader2, RefreshCw, User, Trophy, Crosshair, Award, Hash, Settings, Gamepad, Phone, Mail, Info, Plus, Trash2, Medal } from 'lucide-react';
+import { Users, ChevronDown, ChevronRight, Save, Loader2, RefreshCw, User, Trophy, Crosshair, Award, Hash, Settings, Gamepad, Phone, Mail, Info, Plus, Trash2, Medal, Check, CloudUpload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
