@@ -146,14 +146,14 @@ const Leaderboards = () => {
               <CardTitle className="text-white text-xl">Global Rankings</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="p-0">
-            <Table>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table className="min-w-[600px]">
               <TableHeader>
                 <TableRow className="border-gray-700 hover:bg-transparent">
                   <TableHead className="text-gray-400 font-medium">Rank</TableHead>
                   <TableHead className="text-gray-400 font-medium">Player</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Win Rate</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Tournaments</TableHead>
+                  <TableHead className="text-gray-400 font-medium hidden sm:table-cell">Win Rate</TableHead>
+                  <TableHead className="text-gray-400 font-medium hidden md:table-cell">Tournaments</TableHead>
                   <TableHead className="text-gray-400 font-medium text-right">Earnings</TableHead>
                 </TableRow>
               </TableHeader>
@@ -186,7 +186,7 @@ const Leaderboards = () => {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="py-4">
+                    <TableCell className="py-4 hidden sm:table-cell">
                       <div className="flex items-center gap-3">
                         <div className="flex-1">
                           <Progress 
@@ -199,7 +199,7 @@ const Leaderboards = () => {
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="py-4">
+                    <TableCell className="py-4 hidden md:table-cell">
                       <div className="text-purple-400 font-semibold">
                         {player.tournaments_won} wins
                       </div>

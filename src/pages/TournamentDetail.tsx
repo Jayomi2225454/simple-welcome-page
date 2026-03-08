@@ -107,7 +107,7 @@ const TournamentDetail = () => {
     <Layout>
       <div className="min-h-screen">
         {/* Hero Section */}
-        <div className="relative h-[500px] overflow-hidden animate-fade-in">
+        <div className="relative h-[250px] sm:h-[350px] md:h-[450px] lg:h-[500px] overflow-hidden animate-fade-in">
           {tournament.banner ? (
             <img 
               src={tournament.banner} 
@@ -154,7 +154,7 @@ const TournamentDetail = () => {
                 )}
               </div>
               
-              <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
                 {tournament.name}
               </h1>
               
@@ -293,7 +293,7 @@ const TournamentDetail = () => {
               <TournamentTimer tournament={tournament} />
               
               <Tabs defaultValue="overview" className="w-full">
-                <TabsList className={`grid w-full ${(tournament as any).team_mode === '1v1' ? 'grid-cols-7' : 'grid-cols-6'} bg-gray-800 hover-scale`}>
+                <TabsList className={`flex flex-wrap w-full bg-gray-800 hover-scale gap-1`}>
                   <TabsTrigger value="overview" className="transition-all duration-200 hover:scale-105">Overview</TabsTrigger>
                   <TabsTrigger value="register" className="transition-all duration-200 hover:scale-105">Register</TabsTrigger>
                   {(tournament as any).team_mode === '1v1' && (

@@ -138,10 +138,10 @@ const Index = () => {
       {/* Upcoming Tournaments */}
       <section className="py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center mb-12">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 sm:mb-12">
             <div className="flex items-center space-x-3">
-              <Trophy className="w-8 h-8 text-purple-400" />
-              <h2 className="text-4xl font-bold text-white">Upcoming Tournaments</h2>
+              <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400" />
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">Upcoming Tournaments</h2>
             </div>
             <Button asChild variant="outline" className="border-purple-500 text-purple-400 hover:bg-purple-500/10">
               <Link to="/tournaments" className="inline-flex items-center">
@@ -150,7 +150,7 @@ const Index = () => {
             </Button>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {tournaments.slice(0, 4).map((tournament) => (
               <Link to={`/tournaments/${tournament.id}`} key={tournament.id}>
               <Card className="bg-gray-800/50 border-gray-700 hover:border-purple-500/50 transition-all duration-300 group overflow-hidden cursor-pointer">
@@ -212,10 +212,10 @@ const Index = () => {
       {/* Live Matches */}
       <section className="py-16 bg-gray-800/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center mb-12">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 sm:mb-12">
             <div className="flex items-center space-x-3">
-              <PlayCircle className="w-8 h-8 text-red-400" />
-              <h2 className="text-4xl font-bold text-white">Live Matches</h2>
+              <PlayCircle className="w-6 h-6 sm:w-8 sm:h-8 text-red-400" />
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">Live Matches</h2>
             </div>
             <Button asChild variant="outline" className="border-purple-500 text-purple-400 hover:bg-purple-500/10">
               <Link to="/live-matches" className="inline-flex items-center">
@@ -279,14 +279,14 @@ const Index = () => {
       {/* Leaderboards Preview */}
       <section className="py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center mb-12">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 sm:mb-12">
             <div className="flex items-center space-x-3">
-              <Trophy className="w-8 h-8 text-yellow-400" />
-              <h2 className="text-4xl font-bold text-white">Top Players</h2>
+              <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-400" />
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">Top Players</h2>
             </div>
             <Button asChild variant="outline" className="border-purple-500 text-purple-400 hover:bg-purple-500/10">
-              <Link to="/leaderboards" className="inline-flex items-center">
-                View Full Leaderboards <ArrowRight className="ml-2 w-4 h-4" />
+              <Link to="/leaderboards" className="inline-flex items-center text-sm sm:text-base">
+                View Leaderboards <ArrowRight className="ml-2 w-4 h-4" />
               </Link>
             </Button>
           </div>
@@ -470,7 +470,7 @@ const Index = () => {
       {/* Join the Battle Mitra Community */}
       <section className="py-16 bg-gradient-to-br from-purple-900/20 to-blue-900/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-4xl font-bold text-white mb-4">Join the Battle Mitra Community</h2>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">Join the Battle Mitra Community</h2>
           <p className="text-gray-300 text-lg mb-12 max-w-3xl mx-auto">
             Be part of an active community of gamers, compete in tournaments, win prizes, and make friends along the way.
           </p>
