@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import Layout from '@/components/layout/Layout';
 import TournamentCardTimer from '@/components/tournament/TournamentCardTimer';
+import LiveMatchScoreBadge from '@/components/tournament/LiveMatchScoreBadge';
 import { useGameStore } from '@/store/gameStore';
 
 const Tournaments = () => {
