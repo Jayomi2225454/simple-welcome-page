@@ -228,7 +228,7 @@ const Index = () => {
             {matches.filter(match => match.status === 'live').slice(0, 3).map((match) => (
               <Link to={match.tournament_id ? `/tournaments/${match.tournament_id}` : '/live-matches'} key={match.id}>
               <Card className="bg-gray-800/50 border-gray-700 hover:border-red-500/50 transition-all duration-300 cursor-pointer">
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-sm text-gray-400">{match.game}</span>
                     <div className="flex items-center space-x-2">
