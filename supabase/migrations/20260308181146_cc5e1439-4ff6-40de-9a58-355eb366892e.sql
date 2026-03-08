@@ -1,0 +1,1 @@
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS position_points jsonb DEFAULT '[]'::jsonb;
