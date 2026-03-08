@@ -234,7 +234,7 @@ const Tournaments = () => {
                     {tournament.status === 'ongoing' && <PlayCircle className="w-3.5 h-3.5" />}
                     {tournament.status === 'upcoming' && <Clock className="w-3.5 h-3.5" />}
                     {tournament.status === 'completed' && <CheckCircle className="w-3.5 h-3.5" />}
-                    {tournament.status === 'ongoing' ? '🔴 LIVE' : tournament.status.toUpperCase()}
+                    {tournament.status === 'ongoing' ? '🔴 LIVE' : (tournament.status || 'upcoming').toUpperCase()}
                   </Badge>
                   <Badge variant="secondary" className="bg-purple-500 text-white">
                     {tournament.game || 'battle-royale'}
