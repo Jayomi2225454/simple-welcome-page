@@ -132,8 +132,8 @@ const TournamentDetail = () => {
               </Button>
             </div>
             
-            <div className="p-6 animate-slide-in-right animation-delay-300">
-              <div className="flex flex-wrap gap-2 mb-4">
+            <div className="p-3 sm:p-4 md:p-6 animate-slide-in-right animation-delay-300">
+              <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-2 sm:mb-4">
                 <Badge variant="secondary" className="bg-purple-500 text-white transform hover:scale-105 transition-transform duration-200">
                   {tournament.game || 'battle-royale'}
                 </Badge>
