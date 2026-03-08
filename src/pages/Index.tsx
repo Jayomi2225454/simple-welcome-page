@@ -105,7 +105,7 @@ const Index = () => {
                   asChild
                   variant="outline" 
                   size="lg" 
-                  className="border-purple-500 text-purple-400 hover:bg-purple-500/10 text-lg px-8 py-6"
+                  className="border-purple-500 text-purple-400 hover:bg-purple-500/10 text-sm sm:text-lg px-6 sm:px-8 py-4 sm:py-6"
                 >
                   <Link to="/auth">Login</Link>
                 </Button>
