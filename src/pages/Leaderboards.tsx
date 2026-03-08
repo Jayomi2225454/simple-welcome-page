@@ -146,14 +146,14 @@ const Leaderboards = () => {
               <CardTitle className="text-white text-xl">Global Rankings</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="p-0">
-            <Table>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table className="min-w-[600px]">
               <TableHeader>
                 <TableRow className="border-gray-700 hover:bg-transparent">
                   <TableHead className="text-gray-400 font-medium">Rank</TableHead>
                   <TableHead className="text-gray-400 font-medium">Player</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Win Rate</TableHead>
-                  <TableHead className="text-gray-400 font-medium">Tournaments</TableHead>
+                  <TableHead className="text-gray-400 font-medium hidden sm:table-cell">Win Rate</TableHead>
+                  <TableHead className="text-gray-400 font-medium hidden md:table-cell">Tournaments</TableHead>
                   <TableHead className="text-gray-400 font-medium text-right">Earnings</TableHead>
                 </TableRow>
               </TableHeader>
