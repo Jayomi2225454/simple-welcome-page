@@ -27,6 +27,7 @@ import AISettingsAdmin from '@/components/admin/AISettingsAdmin';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
+import TournamentMatchScoresAdmin from '@/components/admin/TournamentMatchScoresAdmin';
 
 const Admin = () => {
   const { toast } = useToast();
@@ -989,6 +990,14 @@ const Admin = () => {
                         onTimerUpdate={() => initialize()}
                       />
                     </div>
+
+                    {/* 1v1 Match Scores (only for 1v1 tournaments) */}
+                    {(tournament as any).team_mode === '1v1' && (
+                      <TournamentMatchScoresAdmin
+                        tournamentId={tournament.id}
+                        gameName={tournament.game}
+                      />
+                    )}
                   </CardContent>
                 </Card>
               ))}

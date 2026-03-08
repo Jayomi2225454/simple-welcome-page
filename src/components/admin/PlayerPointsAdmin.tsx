@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Users, ChevronDown, ChevronRight, Save, Loader2, RefreshCw, User, Trophy, Crosshair, Award, Hash, Settings, Gamepad, Phone, Mail, Info } from 'lucide-react';
+import { Users, ChevronDown, ChevronRight, Save, Loader2, RefreshCw, User, Trophy, Crosshair, Award, Hash, Settings, Gamepad, Phone, Mail, Info, Plus, Trash2, Medal } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -60,6 +60,7 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
   const [showSettings, setShowSettings] = useState(false);
   const [killPointsValue, setKillPointsValue] = useState(1);
   const [winPointsValue, setWinPointsValue] = useState(1);
+  const [positionPoints, setPositionPoints] = useState<{ position: number; points: number }[]>([]);
   const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
@@ -73,12 +74,16 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
     try {
       const { data } = await supabase
         .from('tournaments')
-        .select('kill_points_value, win_points_value')
+        .select('kill_points_value, win_points_value, position_points')
         .eq('id', tournamentId)
         .single();
       if (data) {
         setKillPointsValue((data as any).kill_points_value ?? 1);
         setWinPointsValue((data as any).win_points_value ?? 1);
+        const pp = (data as any).position_points;
+        if (Array.isArray(pp) && pp.length > 0) {
+          setPositionPoints(pp);
+        }
       }
     } catch (e) {
       console.error('Error loading point settings:', e);
@@ -93,17 +98,30 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
         .update({
           kill_points_value: killPointsValue,
           win_points_value: winPointsValue,
+          position_points: positionPoints,
         } as any)
         .eq('id', tournamentId);
       if (error) throw error;
       toast({ title: 'Settings Saved', description: `1 Kill = ${killPointsValue} pts, 1 Win = ${winPointsValue} pts` });
-      // Recalculate all points
       recalculateAllPoints();
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } finally {
       setSavingSettings(false);
     }
+  };
+
+  const addPositionPoint = () => {
+    const nextPos = positionPoints.length > 0 ? Math.max(...positionPoints.map(p => p.position)) + 1 : 1;
+    setPositionPoints([...positionPoints, { position: nextPos, points: 0 }]);
+  };
+
+  const removePositionPoint = (index: number) => {
+    setPositionPoints(positionPoints.filter((_, i) => i !== index));
+  };
+
+  const updatePositionPoint = (index: number, field: 'position' | 'points', value: number) => {
+    setPositionPoints(prev => prev.map((p, i) => i === index ? { ...p, [field]: value } : p));
   };
 
   const recalculateAllPoints = () => {
@@ -383,6 +401,9 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
           {!showSettings && (
             <p className="text-xs text-muted-foreground mt-1">
               1 Kill = <span className="text-primary font-bold">{killPointsValue}</span> pts · 1 Win = <span className="text-primary font-bold">{winPointsValue}</span> pts
+              {positionPoints.length > 0 && (
+                <> · <span className="text-amber-400 font-bold">{positionPoints.length}</span> position bonuses</>
+              )}
             </p>
           )}
         </CardHeader>
@@ -414,13 +435,67 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                 />
               </div>
             </div>
+
+            {/* Position Points Section */}
+            <div className="mt-4 pt-4 border-t border-border">
+              <div className="flex items-center justify-between mb-3">
+                <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
+                  <Medal className="w-3.5 h-3.5 text-amber-400" /> Points per Position
+                </Label>
+                <Button onClick={addPositionPoint} variant="outline" size="sm" className="h-7 text-xs">
+                  <Plus className="w-3 h-3 mr-1" /> Add Position
+                </Button>
+              </div>
+              {positionPoints.length > 0 ? (
+                <div className="space-y-2">
+                  {positionPoints
+                    .sort((a, b) => a.position - b.position)
+                    .map((pp, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 min-w-[80px]">
+                          <span className="text-xs text-muted-foreground w-4">#{pp.position}</span>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={pp.position}
+                            onChange={e => updatePositionPoint(index, 'position', parseInt(e.target.value) || 1)}
+                            className="bg-secondary border-border text-foreground h-7 w-16 text-xs"
+                            placeholder="Pos"
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground">=</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={pp.points}
+                          onChange={e => updatePositionPoint(index, 'points', parseInt(e.target.value) || 0)}
+                          className="bg-secondary border-border text-foreground h-7 w-20 text-xs"
+                          placeholder="Points"
+                        />
+                        <span className="text-xs text-muted-foreground">pts</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removePositionPoint(index)}
+                          className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No position points configured. Add positions to award bonus points based on placement.</p>
+              )}
+            </div>
+
             <div className="flex items-center gap-3 mt-4">
               <Button onClick={savePointSettings} disabled={savingSettings} size="sm" className="bg-primary hover:bg-primary/90">
                 {savingSettings ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
                 Save & Recalculate
               </Button>
               <p className="text-xs text-muted-foreground">
-                Formula: <span className="text-foreground font-mono">(Kills × {killPointsValue}) + (Wins × {winPointsValue}) = Total Points</span>
+                Formula: <span className="text-foreground font-mono">(Kills × {killPointsValue}) + (Wins × {winPointsValue}){positionPoints.length > 0 ? ' + Position Bonus' : ''} = Total Points</span>
               </p>
             </div>
           </CardContent>
