@@ -154,7 +154,7 @@ const Welcome = () => {
               <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
                 <div className="bg-purple-500/10 rounded-lg sm:rounded-xl p-3 sm:p-4 text-center">
                   <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 mx-auto mb-1 sm:mb-2" />
-                  <div className="text-lg sm:text-xl font-bold text-white">500+</div>
+                  <div className="text-lg sm:text-xl font-bold text-white">10+</div>
                   <div className="text-[10px] sm:text-xs text-gray-400">Tournaments</div>
                 </div>
                 <div className="bg-blue-500/10 rounded-lg sm:rounded-xl p-3 sm:p-4 text-center">
