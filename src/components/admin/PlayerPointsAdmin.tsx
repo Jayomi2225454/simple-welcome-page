@@ -381,64 +381,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
     }));
     triggerAutoSave();
   };
-    setSaving(true);
-    try {
-      for (const team of teams) {
-        for (const member of team.members) {
-          const { error } = await supabase
-            .from('tournament_player_points')
-            .upsert({
-              tournament_id: tournamentId,
-              team_id: team.id,
-              user_id: member.user_id,
-              player_name: member.player_name,
-              points: member.points,
-              kills: member.kills,
-              wins: member.wins,
-            }, { onConflict: 'tournament_id,team_id,user_id' });
-
-          if (error) throw error;
-        }
-
-        const { data: existing } = await supabase
-          .from('tournament_points')
-          .select('id')
-          .eq('tournament_id', tournamentId)
-          .eq('team_id', team.id)
-          .maybeSingle();
-
-        if (existing) {
-          await supabase
-            .from('tournament_points')
-            .update({
-              points: team.totalPoints,
-              kills: team.totalKills,
-              wins: team.totalWins,
-            })
-            .eq('id', existing.id);
-        } else {
-          await supabase
-            .from('tournament_points')
-            .insert({
-              tournament_id: tournamentId,
-              team_id: team.id,
-              team_name: team.team_name,
-              points: team.totalPoints,
-              kills: team.totalKills,
-              wins: team.totalWins,
-              position: 1,
-            });
-        }
-      }
-
-      toast({ title: 'Success', description: 'All player and team points saved!' });
-    } catch (error: any) {
-      console.error('Save error:', error);
-      toast({ title: 'Error', description: error.message || 'Failed to save points', variant: 'destructive' });
-    } finally {
-      setSaving(false);
-    }
-  };
 
   if (loading) {
     return (
