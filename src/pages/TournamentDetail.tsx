@@ -183,12 +183,12 @@ const TournamentDetail = () => {
             </div>
           </div>
           
-          {/* Prize Pool Card */}
-          <div className="absolute top-6 right-6">
-            <Card className="bg-black/20 border-gray-600 backdrop-blur-sm">
-              <CardContent className="p-4 text-center">
-                <p className="text-white text-sm mb-1">Prize Pool</p>
-                <p className="text-yellow-400 text-2xl font-bold">{tournament.prize_pool}</p>
+          {/* Prize Pool Card - hidden on very small screens, shown as badge instead */}
+          <div className="absolute top-3 right-3 sm:top-6 sm:right-6">
+            <Card className="bg-black/30 border-gray-600 backdrop-blur-sm">
+              <CardContent className="p-2 sm:p-4 text-center">
+                <p className="text-white text-xs sm:text-sm mb-0.5 sm:mb-1">Prize Pool</p>
+                <p className="text-yellow-400 text-lg sm:text-2xl font-bold">{tournament.prize_pool}</p>
               </CardContent>
             </Card>
           </div>
