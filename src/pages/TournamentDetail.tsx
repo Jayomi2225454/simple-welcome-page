@@ -120,7 +120,7 @@ const TournamentDetail = () => {
           <div className="absolute inset-0 bg-black/50"></div>
           
           <div className="absolute inset-0 flex flex-col justify-between">
-            <div className="p-6 animate-slide-in-right">
+            <div className="p-3 sm:p-4 md:p-6 animate-slide-in-right">
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -132,8 +132,8 @@ const TournamentDetail = () => {
               </Button>
             </div>
             
-            <div className="p-6 animate-slide-in-right animation-delay-300">
-              <div className="flex flex-wrap gap-2 mb-4">
+            <div className="p-3 sm:p-4 md:p-6 animate-slide-in-right animation-delay-300">
+              <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-2 sm:mb-4">
                 <Badge variant="secondary" className="bg-purple-500 text-white transform hover:scale-105 transition-transform duration-200">
                   {tournament.game || 'battle-royale'}
                 </Badge>
@@ -158,37 +158,37 @@ const TournamentDetail = () => {
                 {tournament.name}
               </h1>
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-white">
+              <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 text-white">
                 <div className="flex items-center">
-                  <Calendar className="w-5 h-5 mr-2" />
-                  <span className="text-sm">
+                  <Calendar className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm truncate">
                     {new Date(tournament.start_date).toLocaleDateString()} - {new Date(tournament.end_date).toLocaleDateString()}
                   </span>
                 </div>
                 <div className="flex items-center">
-                  <Users className="w-5 h-5 mr-2" />
-                  <span className="text-sm">
-                    {tournament.current_participants}/{tournament.max_participants} Participants
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm">
+                    {tournament.current_participants}/{tournament.max_participants}
                   </span>
                 </div>
                 <div className="flex items-center">
-                  <MapPin className="w-5 h-5 mr-2" />
-                  <span className="text-sm">{tournament.region || 'Global'}</span>
+                  <MapPin className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm">{tournament.region || 'Global'}</span>
                 </div>
                 <div className="flex items-center">
-                  <Gamepad className="w-5 h-5 mr-2" />
-                  <span className="text-sm">{tournament.format || 'Battle Royale'}</span>
+                  <Gamepad className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm">{tournament.format || 'Battle Royale'}</span>
                 </div>
               </div>
             </div>
           </div>
           
-          {/* Prize Pool Card */}
-          <div className="absolute top-6 right-6">
-            <Card className="bg-black/20 border-gray-600 backdrop-blur-sm">
-              <CardContent className="p-4 text-center">
-                <p className="text-white text-sm mb-1">Prize Pool</p>
-                <p className="text-yellow-400 text-2xl font-bold">{tournament.prize_pool}</p>
+          {/* Prize Pool Card - hidden on very small screens, shown as badge instead */}
+          <div className="absolute top-3 right-3 sm:top-6 sm:right-6">
+            <Card className="bg-black/30 border-gray-600 backdrop-blur-sm">
+              <CardContent className="p-2 sm:p-4 text-center">
+                <p className="text-white text-xs sm:text-sm mb-0.5 sm:mb-1">Prize Pool</p>
+                <p className="text-yellow-400 text-lg sm:text-2xl font-bold">{tournament.prize_pool}</p>
               </CardContent>
             </Card>
           </div>
@@ -286,29 +286,29 @@ const TournamentDetail = () => {
         )}
 
         {/* Tournament Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in">
-          <div className="grid lg:grid-cols-3 gap-8">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-6 sm:py-8 md:py-12 animate-fade-in">
+          <div className="grid lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
             <div className="lg:col-span-2 animate-slide-in-right">
               {/* Tournament Timer */}
               <TournamentTimer tournament={tournament} />
               
               <Tabs defaultValue="overview" className="w-full">
-                <TabsList className={`flex flex-wrap w-full bg-gray-800 hover-scale gap-1`}>
-                  <TabsTrigger value="overview" className="transition-all duration-200 hover:scale-105">Overview</TabsTrigger>
-                  <TabsTrigger value="register" className="transition-all duration-200 hover:scale-105">Register</TabsTrigger>
+                <TabsList className="flex w-full bg-gray-800 hover-scale overflow-x-auto no-scrollbar gap-0.5 sm:gap-1 p-1">
+                  <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">Overview</TabsTrigger>
+                  <TabsTrigger value="register" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">Register</TabsTrigger>
                   {(tournament as any).team_mode === '1v1' && (
-                    <TabsTrigger value="matches" className="transition-all duration-200 hover:scale-105">
-                      <Swords className="w-4 h-4 mr-1" />
+                    <TabsTrigger value="matches" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">
+                      <Swords className="w-3 h-3 sm:w-4 sm:h-4 mr-0.5 sm:mr-1" />
                       Matches
                     </TabsTrigger>
                   )}
-                  <TabsTrigger value="points" className="transition-all duration-200 hover:scale-105">
-                    <TableIcon className="w-4 h-4 mr-1" />
+                  <TabsTrigger value="points" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">
+                    <TableIcon className="w-3 h-3 sm:w-4 sm:h-4 mr-0.5 sm:mr-1" />
                     Points
                   </TabsTrigger>
-                  <TabsTrigger value="rules" className="transition-all duration-200 hover:scale-105">Rules</TabsTrigger>
-                  <TabsTrigger value="schedule" className="transition-all duration-200 hover:scale-105">Schedule</TabsTrigger>
-                  <TabsTrigger value="prizes" className="transition-all duration-200 hover:scale-105">Prizes</TabsTrigger>
+                  <TabsTrigger value="rules" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">Rules</TabsTrigger>
+                  <TabsTrigger value="schedule" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">Schedule</TabsTrigger>
+                  <TabsTrigger value="prizes" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">Prizes</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="register" className="mt-6">

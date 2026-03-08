@@ -61,15 +61,15 @@ const Index = () => {
         <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 to-blue-900/20" />
         <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1542751371-adc38448a05e')] bg-cover bg-center opacity-10" />
         
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 md:py-24">
           <div className="text-center">
-            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-bold text-white mb-4 sm:mb-6">
               Compete. Dominate.{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
                 Conquer.
               </span>
             </h1>
-            <p className="text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
+            <p className="text-base sm:text-lg md:text-xl text-gray-300 mb-6 sm:mb-8 max-w-3xl mx-auto px-2">
               Join the ultimate esports tournament platform. Participate in competitions,
               climb the leaderboards, and win amazing prizes.
             </p>
@@ -79,7 +79,7 @@ const Index = () => {
                 <Button 
                   asChild
                   size="lg" 
-                  className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-lg px-8 py-6"
+                  className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-sm sm:text-lg px-6 sm:px-8 py-4 sm:py-6"
                 >
                   <Link to="/tournaments">Join a Tournament Now!</Link>
                 </Button>
@@ -87,7 +87,7 @@ const Index = () => {
                   asChild
                   variant="outline" 
                   size="lg" 
-                  className="border-purple-500 text-purple-400 hover:bg-purple-500/10 text-lg px-8 py-6"
+                  className="border-purple-500 text-purple-400 hover:bg-purple-500/10 text-sm sm:text-lg px-6 sm:px-8 py-4 sm:py-6"
                 >
                   <Link to="/tournaments">Browse Tournaments</Link>
                 </Button>
@@ -97,7 +97,7 @@ const Index = () => {
                 <Button 
                   asChild
                   size="lg" 
-                  className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-lg px-8 py-6"
+                  className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-sm sm:text-lg px-6 sm:px-8 py-4 sm:py-6"
                 >
                   <Link to="/auth">Sign Up Now!</Link>
                 </Button>
@@ -105,7 +105,7 @@ const Index = () => {
                   asChild
                   variant="outline" 
                   size="lg" 
-                  className="border-purple-500 text-purple-400 hover:bg-purple-500/10 text-lg px-8 py-6"
+                  className="border-purple-500 text-purple-400 hover:bg-purple-500/10 text-sm sm:text-lg px-6 sm:px-8 py-4 sm:py-6"
                 >
                   <Link to="/auth">Login</Link>
                 </Button>
@@ -117,17 +117,17 @@ const Index = () => {
       </section>
 
       {/* Stats Section */}
-      <section className="py-16 bg-gray-800/50">
+      <section className="py-8 sm:py-12 md:py-16 bg-gray-800/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
             {stats.map((stat) => (
               <Card key={stat.label} className="bg-gray-800/50 border-gray-700 hover:border-purple-500/50 transition-all duration-300">
-                <CardContent className="p-6 text-center">
-                  <stat.icon className={`w-12 h-12 mx-auto mb-4 ${stat.color}`} />
-                  <div className={`text-3xl font-bold mb-2 ${stat.color}`}>
+                <CardContent className="p-3 sm:p-4 md:p-6 text-center">
+                  <stat.icon className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 mx-auto mb-2 sm:mb-4 ${stat.color}`} />
+                  <div className={`text-xl sm:text-2xl md:text-3xl font-bold mb-1 sm:mb-2 ${stat.color}`}>
                     {stat.value}
                   </div>
-                  <div className="text-gray-400 text-sm">{stat.label}</div>
+                  <div className="text-gray-400 text-xs sm:text-sm">{stat.label}</div>
                 </CardContent>
               </Card>
             ))}
@@ -136,7 +136,7 @@ const Index = () => {
       </section>
 
       {/* Upcoming Tournaments */}
-      <section className="py-16">
+      <section className="py-8 sm:py-12 md:py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 sm:mb-12">
             <div className="flex items-center space-x-3">
@@ -210,7 +210,7 @@ const Index = () => {
       </section>
 
       {/* Live Matches */}
-      <section className="py-16 bg-gray-800/30">
+      <section className="py-8 sm:py-12 md:py-16 bg-gray-800/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 sm:mb-12">
             <div className="flex items-center space-x-3">
@@ -224,11 +224,11 @@ const Index = () => {
             </Button>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {matches.filter(match => match.status === 'live').slice(0, 3).map((match) => (
               <Link to={match.tournament_id ? `/tournaments/${match.tournament_id}` : '/live-matches'} key={match.id}>
               <Card className="bg-gray-800/50 border-gray-700 hover:border-red-500/50 transition-all duration-300 cursor-pointer">
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-sm text-gray-400">{match.game}</span>
                     <div className="flex items-center space-x-2">
@@ -237,31 +237,31 @@ const Index = () => {
                     </div>
                   </div>
                   
-                  <div className="text-center mb-6">
-                    <h3 className="text-white font-bold text-lg mb-2">Apex Legends Showdown</h3>
-                    <div className="text-sm text-gray-400">{new Date(match.start_time).toLocaleTimeString()}</div>
+                  <div className="text-center mb-4 sm:mb-6">
+                    <h3 className="text-white font-bold text-base sm:text-lg mb-2">Apex Legends Showdown</h3>
+                    <div className="text-xs sm:text-sm text-gray-400">{new Date(match.start_time).toLocaleTimeString()}</div>
                   </div>
                   
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="text-center">
-                      <div className="w-12 h-12 bg-blue-500/20 rounded border border-blue-500/30 flex items-center justify-center mb-2">
-                        <UserCheck className="w-6 h-6 text-blue-400" />
+                  <div className="flex items-center justify-between mb-4 sm:mb-6">
+                    <div className="text-center flex-1 min-w-0">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500/20 rounded border border-blue-500/30 flex items-center justify-center mb-2 mx-auto">
+                        <UserCheck className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
                       </div>
-                      <div className="text-white font-medium">{match.player1}</div>
+                      <div className="text-white font-medium text-xs sm:text-sm truncate">{match.player1}</div>
                     </div>
                     
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-white mb-1">
+                    <div className="text-center px-2 sm:px-4">
+                      <div className="text-xl sm:text-2xl font-bold text-white mb-1">
                         {match.player1_score} : {match.player2_score}
                       </div>
-                      <div className="text-sm text-purple-400">battle-royale</div>
+                      <div className="text-xs sm:text-sm text-purple-400">battle-royale</div>
                     </div>
                     
-                    <div className="text-center">
-                      <div className="w-12 h-12 bg-blue-500/20 rounded border border-blue-500/30 flex items-center justify-center mb-2">
-                        <UserCheck className="w-6 h-6 text-blue-400" />
+                    <div className="text-center flex-1 min-w-0">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500/20 rounded border border-blue-500/30 flex items-center justify-center mb-2 mx-auto">
+                        <UserCheck className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
                       </div>
-                      <div className="text-white font-medium">{match.player2}</div>
+                      <div className="text-white font-medium text-xs sm:text-sm truncate">{match.player2}</div>
                     </div>
                   </div>
                   
@@ -277,7 +277,7 @@ const Index = () => {
       </section>
 
       {/* Leaderboards Preview */}
-      <section className="py-16">
+      <section className="py-8 sm:py-12 md:py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 sm:mb-12">
             <div className="flex items-center space-x-3">
@@ -291,10 +291,10 @@ const Index = () => {
             </Button>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {players.slice(0, 4).map((player, index) => (
               <Card key={player.id} className="bg-gray-800/50 border-gray-700 hover:border-purple-500/50 transition-all duration-300">
-                <CardContent className="p-6 text-center">
+                <CardContent className="p-3 sm:p-4 md:p-6 text-center">
                   <div className="relative mb-4">
                     <img 
                       src={player.avatar} 
@@ -336,7 +336,7 @@ const Index = () => {
       </section>
 
       {/* Our Sponsors */}
-      <section className="py-20 relative overflow-hidden bg-gradient-to-b from-gray-900/50 to-black/50">
+      <section className="py-10 sm:py-16 md:py-20 relative overflow-hidden bg-gradient-to-b from-gray-900/50 to-black/50">
         {/* Modern Background Effects */}
         <div className="absolute inset-0">
           <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
@@ -345,24 +345,24 @@ const Index = () => {
         
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Modern Header */}
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl mb-6 shadow-lg">
-              <Building className="w-6 h-6 text-white" />
+          <div className="text-center mb-8 sm:mb-12 md:mb-16">
+            <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl sm:rounded-2xl mb-4 sm:mb-6 shadow-lg">
+              <Building className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
             
-            <h2 className="text-4xl md:text-5xl font-bold mb-6">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-4 sm:mb-6">
               <span className="bg-gradient-to-r from-white via-gray-100 to-white bg-clip-text text-transparent">
                 Trusted by Industry Leaders
               </span>
             </h2>
             
-            <p className="text-gray-400 text-lg max-w-2xl mx-auto leading-relaxed">
+            <p className="text-gray-400 text-sm sm:text-base md:text-lg max-w-2xl mx-auto leading-relaxed px-2">
               Partnering with the world's most innovative companies to bring you the best gaming experience
             </p>
           </div>
           
           {/* Colorful Sponsor Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
             {sponsors.map((sponsor, index) => {
               // Dynamic gradient colors for each sponsor
               const gradientColors = [
@@ -468,18 +468,18 @@ const Index = () => {
       </section>
 
       {/* Join the Battle Mitra Community */}
-      <section className="py-16 bg-gradient-to-br from-purple-900/20 to-blue-900/20">
+      <section className="py-8 sm:py-12 md:py-16 bg-gradient-to-br from-purple-900/20 to-blue-900/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-4">Join the Battle Mitra Community</h2>
-          <p className="text-gray-300 text-lg mb-12 max-w-3xl mx-auto">
+          <p className="text-gray-300 text-sm sm:text-base md:text-lg mb-6 sm:mb-8 md:mb-12 max-w-3xl mx-auto px-2">
             Be part of an active community of gamers, compete in tournaments, win prizes, and make friends along the way.
           </p>
           
-          <div className="grid md:grid-cols-3 gap-8 mb-12">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8 mb-8 sm:mb-12">
             <Card className="bg-gray-800/50 border-gray-700 hover:border-purple-500/50 transition-all duration-300">
-              <CardContent className="p-8 text-center">
-                <div className="w-16 h-16 bg-purple-500/20 rounded-lg flex items-center justify-center mx-auto mb-6">
-                  <Users className="w-8 h-8 text-purple-400" />
+              <CardContent className="p-5 sm:p-6 md:p-8 text-center">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 bg-purple-500/20 rounded-lg flex items-center justify-center mx-auto mb-4 sm:mb-6">
+                  <Users className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-purple-400" />
                 </div>
                 <h3 className="text-xl font-bold text-white mb-4">Connect with Gamers</h3>
                 <p className="text-gray-400 mb-6">

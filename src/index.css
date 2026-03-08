@@ -108,4 +108,13 @@ All colors MUST be HSL.
   .brand-text {
     color: hsl(var(--brand-primary));
   }
+
+  /* Hide scrollbar for horizontal scroll areas */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
