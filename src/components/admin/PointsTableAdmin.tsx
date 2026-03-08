@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,6 +53,10 @@ const PointsTableAdmin = () => {
   const [pointsEntries, setPointsEntries] = useState<PointEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingEntry, setEditingEntry] = useState<string | null>(null);
+  const [tableSaveStatus, setTableSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const tableDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tableDirtyRef = useRef(false);
+  const pointsEntriesRef = useRef(pointsEntries);
 
   // OCR states
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
@@ -321,11 +325,17 @@ const PointsTableAdmin = () => {
     });
   };
 
-  const handleSaveAllChanges = async () => {
+  // Keep ref in sync
+  useEffect(() => {
+    pointsEntriesRef.current = pointsEntries;
+  }, [pointsEntries]);
+
+  const autoSaveTable = useCallback(async () => {
+    if (!tableDirtyRef.current) return;
+    const entries = pointsEntriesRef.current;
+    setTableSaveStatus('saving');
     try {
-      setLoading(true);
-      
-      for (const entry of pointsEntries) {
+      for (const entry of entries) {
         if (entry.id) {
           await supabase
             .from('tournament_points')
@@ -341,20 +351,40 @@ const PointsTableAdmin = () => {
             .eq('id', entry.id);
         }
       }
-
-      toast({
-        title: "Success",
-        description: "All changes saved successfully",
-      });
+      tableDirtyRef.current = false;
+      setTableSaveStatus('saved');
+      setTimeout(() => setTableSaveStatus('idle'), 2000);
     } catch (error: any) {
+      setTableSaveStatus('idle');
       toast({
-        title: "Error",
+        title: "Auto-save failed",
         description: error.message || "Failed to save changes",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
+  }, [toast]);
+
+  const triggerTableAutoSave = useCallback(() => {
+    tableDirtyRef.current = true;
+    setTableSaveStatus('idle');
+    if (tableDebounceRef.current) clearTimeout(tableDebounceRef.current);
+    tableDebounceRef.current = setTimeout(() => {
+      autoSaveTable();
+    }, 1500);
+  }, [autoSaveTable]);
+
+  useEffect(() => {
+    return () => {
+      if (tableDebounceRef.current) clearTimeout(tableDebounceRef.current);
+    };
+  }, []);
+
+  const handleInlineEdit = (entryId: string, field: keyof PointEntry, value: string | number) => {
+    setPointsEntries(prev => {
+      const updated = prev.map(p => p.id === entryId ? { ...p, [field]: value } : p);
+      return calculatePositions(updated);
+    });
+    triggerTableAutoSave();
   };
 
   // Get unique groups from entries
@@ -776,10 +806,18 @@ const PointsTableAdmin = () => {
               <Users className="w-5 h-5" />
               Points Table ({pointsEntries.length} Teams)
             </CardTitle>
-            <Button onClick={handleSaveAllChanges} disabled={loading} className="bg-purple-500 hover:bg-purple-600">
-              <Save className="w-4 h-4 mr-2" />
-              Save All Changes
-            </Button>
+            <div className="flex items-center gap-2">
+              {tableSaveStatus === 'saving' && (
+                <span className="text-xs text-gray-400 animate-pulse flex items-center gap-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...
+                </span>
+              )}
+              {tableSaveStatus === 'saved' && (
+                <span className="text-xs text-green-400 flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" /> Saved
+                </span>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {groupMode === 'multiple' && uniqueGroups.length > 0 ? (
@@ -807,92 +845,38 @@ const PointsTableAdmin = () => {
                             <TableRow key={entry.id} className="border-gray-700">
                               <TableCell className="text-white font-bold">{entry.position_in_group}</TableCell>
                               <TableCell>
-                                {editingEntry === entry.id ? (
-                                  <Input
-                                    value={entry.team_name}
-                                    onChange={(e) => {
-                                      setPointsEntries(prev => prev.map(p => 
-                                        p.id === entry.id ? { ...p, team_name: e.target.value } : p
-                                      ));
-                                    }}
-                                    className="bg-gray-700 border-gray-600 text-white"
-                                  />
-                                ) : (
-                                  <span className="text-white">{entry.team_name}</span>
-                                )}
+                                <Input
+                                  value={entry.team_name}
+                                  onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)}
+                                  className="bg-gray-700 border-gray-600 text-white"
+                                />
                               </TableCell>
                               <TableCell>
-                                {editingEntry === entry.id ? (
-                                  <Input
-                                    type="number"
-                                    value={entry.points}
-                                    onChange={(e) => {
-                                      setPointsEntries(prev => prev.map(p => 
-                                        p.id === entry.id ? { ...p, points: parseInt(e.target.value) || 0 } : p
-                                      ));
-                                    }}
-                                    className="bg-gray-700 border-gray-600 text-white w-20"
-                                  />
-                                ) : (
-                                  <span className="text-green-400 font-semibold">{entry.points}</span>
-                                )}
+                                <Input
+                                  type="number"
+                                  value={entry.points}
+                                  onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)}
+                                  className="bg-gray-700 border-gray-600 text-white w-20"
+                                />
                               </TableCell>
                               <TableCell>
-                                {editingEntry === entry.id ? (
-                                  <Input
-                                    type="number"
-                                    value={entry.kills}
-                                    onChange={(e) => {
-                                      setPointsEntries(prev => prev.map(p => 
-                                        p.id === entry.id ? { ...p, kills: parseInt(e.target.value) || 0 } : p
-                                      ));
-                                    }}
-                                    className="bg-gray-700 border-gray-600 text-white w-20"
-                                  />
-                                ) : (
-                                  <span className="text-red-400">{entry.kills}</span>
-                                )}
+                                <Input
+                                  type="number"
+                                  value={entry.kills}
+                                  onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)}
+                                  className="bg-gray-700 border-gray-600 text-white w-20"
+                                />
                               </TableCell>
                               <TableCell>
-                                {editingEntry === entry.id ? (
-                                  <Input
-                                    type="number"
-                                    value={entry.wins}
-                                    onChange={(e) => {
-                                      setPointsEntries(prev => prev.map(p => 
-                                        p.id === entry.id ? { ...p, wins: parseInt(e.target.value) || 0 } : p
-                                      ));
-                                    }}
-                                    className="bg-gray-700 border-gray-600 text-white w-20"
-                                  />
-                                ) : (
-                                  <span className="text-yellow-400">{entry.wins}</span>
-                                )}
+                                <Input
+                                  type="number"
+                                  value={entry.wins}
+                                  onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)}
+                                  className="bg-gray-700 border-gray-600 text-white w-20"
+                                />
                               </TableCell>
                               <TableCell>
                                 <div className="flex gap-2">
-                                  {editingEntry === entry.id ? (
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleUpdateEntry(entry.id!, {
-                                        team_name: entry.team_name,
-                                        points: entry.points,
-                                        kills: entry.kills,
-                                        wins: entry.wins,
-                                      })}
-                                      className="bg-green-500 hover:bg-green-600"
-                                    >
-                                      <Save className="w-4 h-4" />
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      onClick={() => setEditingEntry(entry.id!)}
-                                      className="bg-blue-500 hover:bg-blue-600"
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </Button>
-                                  )}
                                   <Button
                                     size="sm"
                                     onClick={() => handleDeleteEntry(entry.id!)}
@@ -903,7 +887,7 @@ const PointsTableAdmin = () => {
                                   {groupMode === 'multiple' && (
                                     <Select
                                       value={entry.group_name || 'A'}
-                                      onValueChange={(v) => handleUpdateEntry(entry.id!, { group_name: v })}
+                                      onValueChange={(v) => handleInlineEdit(entry.id!, 'group_name', v)}
                                     >
                                       <SelectTrigger className="bg-gray-700 border-gray-600 text-white w-24">
                                         <SelectValue />
@@ -944,100 +928,44 @@ const PointsTableAdmin = () => {
                       <TableRow key={entry.id} className="border-gray-700">
                         <TableCell className="text-white font-bold">#{entry.position}</TableCell>
                         <TableCell>
-                          {editingEntry === entry.id ? (
-                            <Input
-                              value={entry.team_name}
-                              onChange={(e) => {
-                                setPointsEntries(prev => prev.map(p => 
-                                  p.id === entry.id ? { ...p, team_name: e.target.value } : p
-                                ));
-                              }}
-                              className="bg-gray-700 border-gray-600 text-white"
-                            />
-                          ) : (
-                            <span className="text-white">{entry.team_name}</span>
-                          )}
+                          <Input
+                            value={entry.team_name}
+                            onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)}
+                            className="bg-gray-700 border-gray-600 text-white"
+                          />
                         </TableCell>
                         <TableCell>
-                          {editingEntry === entry.id ? (
-                            <Input
-                              type="number"
-                              value={entry.points}
-                              onChange={(e) => {
-                                setPointsEntries(prev => prev.map(p => 
-                                  p.id === entry.id ? { ...p, points: parseInt(e.target.value) || 0 } : p
-                                ));
-                              }}
-                              className="bg-gray-700 border-gray-600 text-white w-20"
-                            />
-                          ) : (
-                            <span className="text-green-400 font-semibold">{entry.points}</span>
-                          )}
+                          <Input
+                            type="number"
+                            value={entry.points}
+                            onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)}
+                            className="bg-gray-700 border-gray-600 text-white w-20"
+                          />
                         </TableCell>
                         <TableCell>
-                          {editingEntry === entry.id ? (
-                            <Input
-                              type="number"
-                              value={entry.kills}
-                              onChange={(e) => {
-                                setPointsEntries(prev => prev.map(p => 
-                                  p.id === entry.id ? { ...p, kills: parseInt(e.target.value) || 0 } : p
-                                ));
-                              }}
-                              className="bg-gray-700 border-gray-600 text-white w-20"
-                            />
-                          ) : (
-                            <span className="text-red-400">{entry.kills}</span>
-                          )}
+                          <Input
+                            type="number"
+                            value={entry.kills}
+                            onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)}
+                            className="bg-gray-700 border-gray-600 text-white w-20"
+                          />
                         </TableCell>
                         <TableCell>
-                          {editingEntry === entry.id ? (
-                            <Input
-                              type="number"
-                              value={entry.wins}
-                              onChange={(e) => {
-                                setPointsEntries(prev => prev.map(p => 
-                                  p.id === entry.id ? { ...p, wins: parseInt(e.target.value) || 0 } : p
-                                ));
-                              }}
-                              className="bg-gray-700 border-gray-600 text-white w-20"
-                            />
-                          ) : (
-                            <span className="text-yellow-400">{entry.wins}</span>
-                          )}
+                          <Input
+                            type="number"
+                            value={entry.wins}
+                            onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)}
+                            className="bg-gray-700 border-gray-600 text-white w-20"
+                          />
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
-                            {editingEntry === entry.id ? (
-                              <Button
-                                size="sm"
-                                onClick={() => handleUpdateEntry(entry.id!, {
-                                  team_name: entry.team_name,
-                                  points: entry.points,
-                                  kills: entry.kills,
-                                  wins: entry.wins,
-                                })}
-                                className="bg-green-500 hover:bg-green-600"
-                              >
-                                <Save className="w-4 h-4" />
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                onClick={() => setEditingEntry(entry.id!)}
-                                className="bg-blue-500 hover:bg-blue-600"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              onClick={() => handleDeleteEntry(entry.id!)}
-                              className="bg-red-500 hover:bg-red-600"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => handleDeleteEntry(entry.id!)}
+                            className="bg-red-500 hover:bg-red-600"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}

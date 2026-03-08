@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Users, ChevronDown, ChevronRight, Save, Loader2, RefreshCw, User, Trophy, Crosshair, Award, Hash, Settings, Gamepad, Phone, Mail, Info, Plus, Trash2, Medal } from 'lucide-react';
+import { Users, ChevronDown, ChevronRight, Save, Loader2, RefreshCw, User, Trophy, Crosshair, Award, Hash, Settings, Gamepad, Phone, Mail, Info, Plus, Trash2, Medal, Check, CloudUpload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -57,12 +57,16 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
   const [teams, setTeams] = useState<RegisteredTeam[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
   const [killPointsValue, setKillPointsValue] = useState(1);
   const [winPointsValue, setWinPointsValue] = useState(1);
   const [positionPoints, setPositionPoints] = useState<{ position: number; points: number }[]>([]);
   const [savingSettings, setSavingSettings] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isDirtyRef = useRef(false);
+  const teamsRef = useRef(teams);
 
   useEffect(() => {
     if (tournamentId) {
@@ -275,30 +279,17 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
   const expandAll = () => setExpandedTeams(new Set(teams.map(t => t.id)));
   const collapseAll = () => setExpandedTeams(new Set());
 
-  const updatePlayerField = (teamId: string, userId: string, field: 'kills' | 'wins', value: number) => {
-    setTeams(prev => prev.map(team => {
-      if (team.id !== teamId) return team;
-      const members = team.members.map(m => {
-        if (m.user_id !== userId) return m;
-        const updated = { ...m, [field]: value };
-        // Auto-calculate points: kills × multiplier + position bonus
-        updated.points = updated.kills * killPointsValue + getPositionBonus(updated.wins);
-        return updated;
-      });
-      return {
-        ...team,
-        members,
-        totalPoints: members.reduce((s, m) => s + m.points, 0),
-        totalKills: members.reduce((s, m) => s + m.kills, 0),
-        totalWins: members.reduce((s, m) => s + m.wins, 0),
-      };
-    }));
-  };
+  // Keep teamsRef in sync
+  useEffect(() => {
+    teamsRef.current = teams;
+  }, [teams]);
 
-  const handleSaveAll = async () => {
-    setSaving(true);
+  const autoSave = useCallback(async () => {
+    if (!isDirtyRef.current) return;
+    const currentTeams = teamsRef.current;
+    setSaveStatus('saving');
     try {
-      for (const team of teams) {
+      for (const team of currentTeams) {
         for (const member of team.members) {
           const { error } = await supabase
             .from('tournament_player_points')
@@ -311,7 +302,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
               kills: member.kills,
               wins: member.wins,
             }, { onConflict: 'tournament_id,team_id,user_id' });
-
           if (error) throw error;
         }
 
@@ -345,14 +335,51 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
             });
         }
       }
-
-      toast({ title: 'Success', description: 'All player and team points saved!' });
+      isDirtyRef.current = false;
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error: any) {
-      console.error('Save error:', error);
-      toast({ title: 'Error', description: error.message || 'Failed to save points', variant: 'destructive' });
-    } finally {
-      setSaving(false);
+      console.error('Auto-save error:', error);
+      setSaveStatus('idle');
+      toast({ title: 'Auto-save failed', description: error.message, variant: 'destructive' });
     }
+  }, [tournamentId, toast]);
+
+  const triggerAutoSave = useCallback(() => {
+    isDirtyRef.current = true;
+    setSaveStatus('idle');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      autoSave();
+    }, 1500);
+  }, [autoSave]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const updatePlayerField = (teamId: string, userId: string, field: 'kills' | 'wins', value: number) => {
+    setTeams(prev => prev.map(team => {
+      if (team.id !== teamId) return team;
+      const members = team.members.map(m => {
+        if (m.user_id !== userId) return m;
+        const updated = { ...m, [field]: value };
+        // Auto-calculate points: kills × multiplier + position bonus
+        updated.points = updated.kills * killPointsValue + getPositionBonus(updated.wins);
+        return updated;
+      });
+      return {
+        ...team,
+        members,
+        totalPoints: members.reduce((s, m) => s + m.points, 0),
+        totalKills: members.reduce((s, m) => s + m.kills, 0),
+        totalWins: members.reduce((s, m) => s + m.wins, 0),
+      };
+    }));
+    triggerAutoSave();
   };
 
   if (loading) {
@@ -556,6 +583,19 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Auto-save status indicator */}
+              {saveStatus === 'saving' && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
+                  <CloudUpload className="w-3.5 h-3.5" />
+                  <span>Saving...</span>
+                </div>
+              )}
+              {saveStatus === 'saved' && (
+                <div className="flex items-center gap-1.5 text-xs text-green-400">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Saved</span>
+                </div>
+              )}
               <Button onClick={expandAll} variant="ghost" size="sm" className="text-xs h-8 text-muted-foreground">
                 Expand All
               </Button>
@@ -564,10 +604,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
               </Button>
               <Button onClick={loadTeamsAndPlayers} variant="outline" size="sm" className="h-8">
                 <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
-              </Button>
-              <Button onClick={handleSaveAll} disabled={saving} size="sm" className="h-8 bg-primary hover:bg-primary/90">
-                {saving ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
-                Save All
               </Button>
             </div>
           </div>
