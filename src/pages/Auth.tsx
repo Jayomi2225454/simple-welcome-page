@@ -35,13 +35,10 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
       // If input looks like a phone number, look up the email from profiles
       const isPhone = /^[\d+\-\s()]+$/.test(email) && email.replace(/\D/g, '').length >= 7;
       if (isPhone) {
-        const { data: profile, error: lookupError } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('phone_number', email)
-          .maybeSingle();
+        const { data: foundEmail, error: lookupError } = await supabase
+          .rpc('get_email_by_phone', { phone: email });
         
-        if (lookupError || !profile?.email) {
+        if (lookupError || !foundEmail) {
           toast({
             title: "Login Failed",
             description: "No account found with this phone number.",
@@ -50,7 +47,7 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
           setIsLoading(false);
           return;
         }
-        email = profile.email;
+        email = foundEmail;
       }
 
       const { error } = await signIn(email, loginData.password);
