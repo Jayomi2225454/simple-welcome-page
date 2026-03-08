@@ -599,6 +599,10 @@ const Admin = () => {
               <Settings className="w-4 h-4 mr-2" />
               Settings
             </TabsTrigger>
+            <TabsTrigger value="support-chat" className="data-[state=active]:bg-purple-500">
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Support
+            </TabsTrigger>
           </TabsList>
 
           {/* Registrations Tab */}
