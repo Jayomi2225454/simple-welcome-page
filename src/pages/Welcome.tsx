@@ -192,13 +192,13 @@ const Welcome = () => {
                 : 'border-emerald-500/30 hover:border-emerald-500/50'
             }`}>
               {/* Icon */}
-              <div className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 mx-auto mb-4 sm:mb-6 rounded-xl sm:rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center transition-all duration-500 overflow-hidden ${
-                hoveredSection === 'sports' ? 'scale-110 shadow-2xl shadow-emerald-500/50' : ''
+              <div className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 mx-auto mb-4 sm:mb-6 flex items-center justify-center transition-all duration-500 ${
+                hoveredSection === 'sports' ? 'scale-110' : ''
               }`}>
                 <img 
                   src="/lovable-uploads/b263082d-907f-4305-88f6-cda9b8e2ecac.png" 
                   alt="Sports Logo" 
-                  className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 object-contain"
+                  className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 object-contain"
                 />
               </div>
 
