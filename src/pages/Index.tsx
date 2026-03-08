@@ -242,26 +242,26 @@ const Index = () => {
                     <div className="text-xs sm:text-sm text-gray-400">{new Date(match.start_time).toLocaleTimeString()}</div>
                   </div>
                   
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="text-center">
-                      <div className="w-12 h-12 bg-blue-500/20 rounded border border-blue-500/30 flex items-center justify-center mb-2">
-                        <UserCheck className="w-6 h-6 text-blue-400" />
+                  <div className="flex items-center justify-between mb-4 sm:mb-6">
+                    <div className="text-center flex-1 min-w-0">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500/20 rounded border border-blue-500/30 flex items-center justify-center mb-2 mx-auto">
+                        <UserCheck className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
                       </div>
-                      <div className="text-white font-medium">{match.player1}</div>
+                      <div className="text-white font-medium text-xs sm:text-sm truncate">{match.player1}</div>
                     </div>
                     
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-white mb-1">
+                    <div className="text-center px-2 sm:px-4">
+                      <div className="text-xl sm:text-2xl font-bold text-white mb-1">
                         {match.player1_score} : {match.player2_score}
                       </div>
-                      <div className="text-sm text-purple-400">battle-royale</div>
+                      <div className="text-xs sm:text-sm text-purple-400">battle-royale</div>
                     </div>
                     
-                    <div className="text-center">
-                      <div className="w-12 h-12 bg-blue-500/20 rounded border border-blue-500/30 flex items-center justify-center mb-2">
-                        <UserCheck className="w-6 h-6 text-blue-400" />
+                    <div className="text-center flex-1 min-w-0">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500/20 rounded border border-blue-500/30 flex items-center justify-center mb-2 mx-auto">
+                        <UserCheck className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
                       </div>
-                      <div className="text-white font-medium">{match.player2}</div>
+                      <div className="text-white font-medium text-xs sm:text-sm truncate">{match.player2}</div>
                     </div>
                   </div>
                   
