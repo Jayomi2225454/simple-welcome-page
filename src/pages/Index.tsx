@@ -224,7 +224,7 @@ const Index = () => {
             </Button>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {matches.filter(match => match.status === 'live').slice(0, 3).map((match) => (
               <Link to={match.tournament_id ? `/tournaments/${match.tournament_id}` : '/live-matches'} key={match.id}>
               <Card className="bg-gray-800/50 border-gray-700 hover:border-red-500/50 transition-all duration-300 cursor-pointer">
