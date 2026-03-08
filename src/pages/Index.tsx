@@ -362,7 +362,7 @@ const Index = () => {
           </div>
           
           {/* Colorful Sponsor Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
             {sponsors.map((sponsor, index) => {
               // Dynamic gradient colors for each sponsor
               const gradientColors = [
