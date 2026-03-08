@@ -53,6 +53,10 @@ const PointsTableAdmin = () => {
   const [pointsEntries, setPointsEntries] = useState<PointEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingEntry, setEditingEntry] = useState<string | null>(null);
+  const [tableSaveStatus, setTableSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const tableDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tableDirtyRef = useRef(false);
+  const pointsEntriesRef = useRef(pointsEntries);
 
   // OCR states
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
