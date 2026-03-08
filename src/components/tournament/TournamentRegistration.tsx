@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { tournamentRegistrationService, TournamentRegistration, TournamentRoom } from '@/services/tournamentRegistrationService';
 import { supabase } from '@/integrations/supabase/client';
 import { Tournament } from '@/types';
-import { Users, Lock, CheckCircle, Clock, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Users, Lock, CheckCircle, Clock, XCircle, AlertTriangle, RefreshCw, Copy, Check } from 'lucide-react';
 import RegistrationFormDialog from './RegistrationFormDialog';
 import PaymentRetryDialog from './PaymentRetryDialog';
 import TournamentTimer from './TournamentTimer';
