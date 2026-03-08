@@ -30,7 +30,30 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
     setIsLoading(true);
 
     try {
-      const { error } = await signIn(loginData.email, loginData.password);
+      let email = loginData.emailOrPhone.trim();
+      
+      // If input looks like a phone number, look up the email from profiles
+      const isPhone = /^[\d+\-\s()]+$/.test(email) && email.replace(/\D/g, '').length >= 7;
+      if (isPhone) {
+        const { data: profile, error: lookupError } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('phone_number', email)
+          .maybeSingle();
+        
+        if (lookupError || !profile?.email) {
+          toast({
+            title: "Login Failed",
+            description: "No account found with this phone number.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+        email = profile.email;
+      }
+
+      const { error } = await signIn(email, loginData.password);
       
       if (error) {
         toast({
