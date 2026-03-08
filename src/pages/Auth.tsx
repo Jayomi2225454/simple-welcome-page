@@ -47,7 +47,7 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
           setIsLoading(false);
           return;
         }
-        email = profile.email;
+        email = foundEmail;
       }
 
       const { error } = await signIn(email, loginData.password);
