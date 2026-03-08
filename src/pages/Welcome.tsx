@@ -132,13 +132,13 @@ const Welcome = () => {
                 : 'border-purple-500/30 hover:border-purple-500/50'
             }`}>
               {/* Icon */}
-              <div className={`w-20 h-20 sm:w-28 sm:h-28 md:w-32 md:h-32 mx-auto mb-4 sm:mb-6 flex items-center justify-center transition-all duration-500 ${
+              <div className={`w-28 h-28 sm:w-36 sm:h-36 md:w-44 md:h-44 mx-auto mb-4 sm:mb-6 flex items-center justify-center transition-all duration-500 ${
                 hoveredSection === 'esports' ? 'scale-110' : ''
               }`}>
                 <img 
                   src="/lovable-uploads/b263082d-907f-4305-88f6-cda9b8e2ecac.png" 
                   alt="Esports Logo" 
-                  className="w-20 h-20 sm:w-28 sm:h-28 md:w-32 md:h-32 object-contain"
+                  className="w-28 h-28 sm:w-36 sm:h-36 md:w-44 md:h-44 object-contain"
                 />
               </div>
 
