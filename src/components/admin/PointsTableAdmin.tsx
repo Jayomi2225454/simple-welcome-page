@@ -325,11 +325,17 @@ const PointsTableAdmin = () => {
     });
   };
 
-  const handleSaveAllChanges = async () => {
+  // Keep ref in sync
+  useEffect(() => {
+    pointsEntriesRef.current = pointsEntries;
+  }, [pointsEntries]);
+
+  const autoSaveTable = useCallback(async () => {
+    if (!tableDirtyRef.current) return;
+    const entries = pointsEntriesRef.current;
+    setTableSaveStatus('saving');
     try {
-      setLoading(true);
-      
-      for (const entry of pointsEntries) {
+      for (const entry of entries) {
         if (entry.id) {
           await supabase
             .from('tournament_points')
@@ -345,20 +351,40 @@ const PointsTableAdmin = () => {
             .eq('id', entry.id);
         }
       }
-
-      toast({
-        title: "Success",
-        description: "All changes saved successfully",
-      });
+      tableDirtyRef.current = false;
+      setTableSaveStatus('saved');
+      setTimeout(() => setTableSaveStatus('idle'), 2000);
     } catch (error: any) {
+      setTableSaveStatus('idle');
       toast({
-        title: "Error",
+        title: "Auto-save failed",
         description: error.message || "Failed to save changes",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
+  }, [toast]);
+
+  const triggerTableAutoSave = useCallback(() => {
+    tableDirtyRef.current = true;
+    setTableSaveStatus('idle');
+    if (tableDebounceRef.current) clearTimeout(tableDebounceRef.current);
+    tableDebounceRef.current = setTimeout(() => {
+      autoSaveTable();
+    }, 1500);
+  }, [autoSaveTable]);
+
+  useEffect(() => {
+    return () => {
+      if (tableDebounceRef.current) clearTimeout(tableDebounceRef.current);
+    };
+  }, []);
+
+  const handleInlineEdit = (entryId: string, field: keyof PointEntry, value: string | number) => {
+    setPointsEntries(prev => {
+      const updated = prev.map(p => p.id === entryId ? { ...p, [field]: value } : p);
+      return calculatePositions(updated);
+    });
+    triggerTableAutoSave();
   };
 
   // Get unique groups from entries
