@@ -107,7 +107,7 @@ const TournamentDetail = () => {
     <Layout>
       <div className="min-h-screen">
         {/* Hero Section */}
-        <div className="relative h-[500px] overflow-hidden animate-fade-in">
+        <div className="relative h-[250px] sm:h-[350px] md:h-[450px] lg:h-[500px] overflow-hidden animate-fade-in">
           {tournament.banner ? (
             <img 
               src={tournament.banner} 
