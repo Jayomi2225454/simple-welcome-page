@@ -331,6 +331,9 @@ const Header = () => {
           </div>
         )}
       </div>
+      {showLiveChat && (
+        <LiveSupportChat isOpen={showLiveChat} onClose={() => setShowLiveChat(false)} />
+      )}
     </header>
   );
 };
