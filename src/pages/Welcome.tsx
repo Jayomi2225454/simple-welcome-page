@@ -74,7 +74,7 @@ const Welcome = () => {
             <img 
               src="/lovable-uploads/2aa9115f-ce05-4d8a-bab3-2cf4f362ef5e.png" 
               alt="Battle Mitra Logo" 
-              className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain"
             />
             <span className="text-xl sm:text-2xl font-bold text-white">Battle Mitra</span>
           </div>
