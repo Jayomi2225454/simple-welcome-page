@@ -256,7 +256,7 @@ const Admin = () => {
         end_time: tournamentForm.end_time || undefined,
         entry_fee: entryFee,
         team_size: is1v1 ? '1' : tournamentForm.team_size,
-        team_mode: is1v1 ? '1v1' : tournamentForm.team_size,
+        team_mode: is1v1 ? '1v1' : (tournamentForm.team_size === '1' ? 'solo' : tournamentForm.team_size === '2' ? 'duo' : tournamentForm.team_size === '5' ? '5-man' : 'squad'),
         registration_opens: tournamentForm.registration_opens ? new Date(tournamentForm.registration_opens).toISOString() : undefined,
         registration_closes: tournamentForm.registration_closes ? new Date(tournamentForm.registration_closes).toISOString() : undefined,
         winners: tournamentForm.winners || undefined,
