@@ -79,7 +79,7 @@ const Index = () => {
                 <Button 
                   asChild
                   size="lg" 
-                  className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-lg px-8 py-6"
+                  className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-sm sm:text-lg px-6 sm:px-8 py-4 sm:py-6"
                 >
                   <Link to="/tournaments">Join a Tournament Now!</Link>
                 </Button>
