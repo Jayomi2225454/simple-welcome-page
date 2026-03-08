@@ -212,10 +212,10 @@ const Index = () => {
       {/* Live Matches */}
       <section className="py-16 bg-gray-800/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center mb-12">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 sm:mb-12">
             <div className="flex items-center space-x-3">
-              <PlayCircle className="w-8 h-8 text-red-400" />
-              <h2 className="text-4xl font-bold text-white">Live Matches</h2>
+              <PlayCircle className="w-6 h-6 sm:w-8 sm:h-8 text-red-400" />
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">Live Matches</h2>
             </div>
             <Button asChild variant="outline" className="border-purple-500 text-purple-400 hover:bg-purple-500/10">
               <Link to="/live-matches" className="inline-flex items-center">
