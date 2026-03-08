@@ -24,6 +24,7 @@ import PointsTableAdmin from '@/components/admin/PointsTableAdmin';
 import BattleCodeAdmin from '@/components/admin/BattleCodeAdmin';
 import TournamentRegistrationsAdmin from '@/components/admin/TournamentRegistrationsAdmin';
 import AISettingsAdmin from '@/components/admin/AISettingsAdmin';
+import SupportChatAdmin from '@/components/admin/SupportChatAdmin';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
