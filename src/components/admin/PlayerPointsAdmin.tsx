@@ -686,15 +686,25 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                             />
                           </div>
                           <div className="text-center">
-                            <label className="text-[10px] text-yellow-400 flex items-center gap-0.5 justify-center mb-0.5">
-                              <Award className="w-2.5 h-2.5" /> Wins
+                            <label className="text-[10px] text-amber-400 flex items-center gap-0.5 justify-center mb-0.5">
+                              <Medal className="w-2.5 h-2.5" /> Position
                             </label>
-                            <Input
-                              type="number"
-                              value={member.wins}
-                              onChange={e => updatePlayerField(team.id, member.user_id, 'wins', parseInt(e.target.value) || 0)}
-                              className="bg-secondary border-border text-foreground w-16 h-8 text-sm text-center"
-                            />
+                            <Select
+                              value={String(member.wins || 0)}
+                              onValueChange={(v) => updatePlayerField(team.id, member.user_id, 'wins', parseInt(v))}
+                            >
+                              <SelectTrigger className="bg-secondary border-border text-foreground w-20 h-8 text-sm">
+                                <SelectValue placeholder="-" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-background border-border">
+                                <SelectItem value="0">-</SelectItem>
+                                {[1,2,3,4,5,6,7,8,9,10].map(pos => (
+                                  <SelectItem key={pos} value={String(pos)}>
+                                    #{pos} {getPositionBonus(pos) > 0 ? `(+${getPositionBonus(pos)})` : ''}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div className="text-center">
                             <label className="text-[10px] text-green-400 flex items-center gap-0.5 justify-center mb-0.5">
