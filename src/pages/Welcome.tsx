@@ -228,7 +228,7 @@ const Welcome = () => {
               <div className={`w-full py-3 sm:py-4 rounded-lg sm:rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold text-sm sm:text-base text-center transition-all duration-300 ${
                 hoveredSection === 'sports' ? 'shadow-lg shadow-emerald-500/30' : ''
               }`}>
-                Enter Sports Arena →
+                Coming Soon
               </div>
             </div>
           </button>
