@@ -405,8 +405,12 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
           </div>
           {!showSettings && (
             <p className="text-xs text-muted-foreground mt-1">
-              1 Kill = <span className="text-primary font-bold">{killPointsValue}</span> pts · 1 Win = <span className="text-primary font-bold">{winPointsValue}</span> pts
+              1 Kill = <span className="text-primary font-bold">{killPointsValue}</span> pts
               {positionPoints.length > 0 && (
+                <> · <span className="text-amber-400 font-bold">{positionPoints.length}</span> position bonuses configured</>
+              )}
+            </p>
+          )}
                 <> · <span className="text-amber-400 font-bold">{positionPoints.length}</span> position bonuses</>
               )}
             </p>
