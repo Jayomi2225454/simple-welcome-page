@@ -158,26 +158,26 @@ const TournamentDetail = () => {
                 {tournament.name}
               </h1>
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-white">
+              <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 text-white">
                 <div className="flex items-center">
-                  <Calendar className="w-5 h-5 mr-2" />
-                  <span className="text-sm">
+                  <Calendar className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm truncate">
                     {new Date(tournament.start_date).toLocaleDateString()} - {new Date(tournament.end_date).toLocaleDateString()}
                   </span>
                 </div>
                 <div className="flex items-center">
-                  <Users className="w-5 h-5 mr-2" />
-                  <span className="text-sm">
-                    {tournament.current_participants}/{tournament.max_participants} Participants
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm">
+                    {tournament.current_participants}/{tournament.max_participants}
                   </span>
                 </div>
                 <div className="flex items-center">
-                  <MapPin className="w-5 h-5 mr-2" />
-                  <span className="text-sm">{tournament.region || 'Global'}</span>
+                  <MapPin className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm">{tournament.region || 'Global'}</span>
                 </div>
                 <div className="flex items-center">
-                  <Gamepad className="w-5 h-5 mr-2" />
-                  <span className="text-sm">{tournament.format || 'Battle Royale'}</span>
+                  <Gamepad className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 flex-shrink-0" />
+                  <span className="text-xs sm:text-sm">{tournament.format || 'Battle Royale'}</span>
                 </div>
               </div>
             </div>
