@@ -806,10 +806,18 @@ const PointsTableAdmin = () => {
               <Users className="w-5 h-5" />
               Points Table ({pointsEntries.length} Teams)
             </CardTitle>
-            <Button onClick={handleSaveAllChanges} disabled={loading} className="bg-purple-500 hover:bg-purple-600">
-              <Save className="w-4 h-4 mr-2" />
-              Save All Changes
-            </Button>
+            <div className="flex items-center gap-2">
+              {tableSaveStatus === 'saving' && (
+                <span className="text-xs text-gray-400 animate-pulse flex items-center gap-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...
+                </span>
+              )}
+              {tableSaveStatus === 'saved' && (
+                <span className="text-xs text-green-400 flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" /> Saved
+                </span>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {groupMode === 'multiple' && uniqueGroups.length > 0 ? (
