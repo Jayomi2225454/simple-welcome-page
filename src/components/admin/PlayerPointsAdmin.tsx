@@ -57,12 +57,16 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
   const [teams, setTeams] = useState<RegisteredTeam[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
   const [killPointsValue, setKillPointsValue] = useState(1);
   const [winPointsValue, setWinPointsValue] = useState(1);
   const [positionPoints, setPositionPoints] = useState<{ position: number; points: number }[]>([]);
   const [savingSettings, setSavingSettings] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isDirtyRef = useRef(false);
+  const teamsRef = useRef(teams);
 
   useEffect(() => {
     if (tournamentId) {
