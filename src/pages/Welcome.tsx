@@ -159,7 +159,7 @@ const Welcome = () => {
                 </div>
                 <div className="bg-blue-500/10 rounded-lg sm:rounded-xl p-3 sm:p-4 text-center">
                   <Users className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400 mx-auto mb-1 sm:mb-2" />
-                  <div className="text-lg sm:text-xl font-bold text-white">50k+</div>
+                  <div className="text-lg sm:text-xl font-bold text-white">1k+</div>
                   <div className="text-[10px] sm:text-xs text-gray-400">Players</div>
                 </div>
               </div>
