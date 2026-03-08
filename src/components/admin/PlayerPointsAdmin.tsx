@@ -98,17 +98,30 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
         .update({
           kill_points_value: killPointsValue,
           win_points_value: winPointsValue,
+          position_points: positionPoints,
         } as any)
         .eq('id', tournamentId);
       if (error) throw error;
       toast({ title: 'Settings Saved', description: `1 Kill = ${killPointsValue} pts, 1 Win = ${winPointsValue} pts` });
-      // Recalculate all points
       recalculateAllPoints();
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } finally {
       setSavingSettings(false);
     }
+  };
+
+  const addPositionPoint = () => {
+    const nextPos = positionPoints.length > 0 ? Math.max(...positionPoints.map(p => p.position)) + 1 : 1;
+    setPositionPoints([...positionPoints, { position: nextPos, points: 0 }]);
+  };
+
+  const removePositionPoint = (index: number) => {
+    setPositionPoints(positionPoints.filter((_, i) => i !== index));
+  };
+
+  const updatePositionPoint = (index: number, field: 'position' | 'points', value: number) => {
+    setPositionPoints(prev => prev.map((p, i) => i === index ? { ...p, [field]: value } : p));
   };
 
   const recalculateAllPoints = () => {
