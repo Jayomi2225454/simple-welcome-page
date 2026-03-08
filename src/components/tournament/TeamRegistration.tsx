@@ -922,15 +922,41 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
               {roomDetails && (roomDetails.room_id || roomDetails.room_password) ? (
                 <>
                   {roomDetails.room_id && (
-                    <div className="p-4 bg-black/20 rounded-lg border border-green-500/20">
-                      <p className="text-sm font-bold text-green-200 mb-2">Room ID</p>
-                      <p className="font-mono text-xl text-white font-bold">{roomDetails.room_id}</p>
+                    <div className="p-4 bg-black/20 rounded-lg border border-green-500/20 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-green-200 mb-2">Room ID</p>
+                        <p className="font-mono text-xl text-white font-bold">{roomDetails.room_id}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-green-300 hover:text-white hover:bg-green-500/20"
+                        onClick={() => {
+                          navigator.clipboard.writeText(roomDetails.room_id!);
+                          toast({ title: "Copied!", description: "Room ID copied to clipboard." });
+                        }}
+                      >
+                        <Copy className="w-5 h-5" />
+                      </Button>
                     </div>
                   )}
                   {roomDetails.room_password && (
-                    <div className="p-4 bg-black/20 rounded-lg border border-emerald-500/20">
-                      <p className="text-sm font-bold text-emerald-200 mb-2">Password</p>
-                      <p className="font-mono text-xl text-white font-bold">{roomDetails.room_password}</p>
+                    <div className="p-4 bg-black/20 rounded-lg border border-emerald-500/20 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-emerald-200 mb-2">Password</p>
+                        <p className="font-mono text-xl text-white font-bold">{roomDetails.room_password}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-emerald-300 hover:text-white hover:bg-emerald-500/20"
+                        onClick={() => {
+                          navigator.clipboard.writeText(roomDetails.room_password!);
+                          toast({ title: "Copied!", description: "Password copied to clipboard." });
+                        }}
+                      >
+                        <Copy className="w-5 h-5" />
+                      </Button>
                     </div>
                   )}
                   <div className="p-3 bg-yellow-500/10 border border-yellow-400/30 rounded-lg">
