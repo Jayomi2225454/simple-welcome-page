@@ -286,16 +286,16 @@ const TournamentDetail = () => {
         )}
 
         {/* Tournament Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in">
-          <div className="grid lg:grid-cols-3 gap-8">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-6 sm:py-8 md:py-12 animate-fade-in">
+          <div className="grid lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
             <div className="lg:col-span-2 animate-slide-in-right">
               {/* Tournament Timer */}
               <TournamentTimer tournament={tournament} />
               
               <Tabs defaultValue="overview" className="w-full">
-                <TabsList className={`flex flex-wrap w-full bg-gray-800 hover-scale gap-1`}>
-                  <TabsTrigger value="overview" className="transition-all duration-200 hover:scale-105">Overview</TabsTrigger>
-                  <TabsTrigger value="register" className="transition-all duration-200 hover:scale-105">Register</TabsTrigger>
+                <TabsList className="flex w-full bg-gray-800 hover-scale overflow-x-auto no-scrollbar gap-0.5 sm:gap-1 p-1">
+                  <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">Overview</TabsTrigger>
+                  <TabsTrigger value="register" className="text-xs sm:text-sm px-2 sm:px-3 transition-all duration-200">Register</TabsTrigger>
                   {(tournament as any).team_mode === '1v1' && (
                     <TabsTrigger value="matches" className="transition-all duration-200 hover:scale-105">
                       <Swords className="w-4 h-4 mr-1" />
