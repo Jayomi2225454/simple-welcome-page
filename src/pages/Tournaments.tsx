@@ -95,18 +95,18 @@ const Tournaments = () => {
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 md:py-12">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-white mb-4">Tournaments</h1>
-          <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+        <div className="text-center mb-6 sm:mb-8 md:mb-12">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 sm:mb-4">Tournaments</h1>
+          <p className="text-gray-400 text-sm sm:text-base md:text-lg max-w-2xl mx-auto px-2">
             Browse through our wide range of tournaments across various games and regions. Find the perfect competition to showcase your skills and win amazing prizes.
           </p>
         </div>
 
         {/* Filters Section */}
-        <Card className="bg-gray-800 border-gray-700 mb-8">
-          <CardContent className="p-6">
+        <Card className="bg-gray-800 border-gray-700 mb-6 sm:mb-8">
+          <CardContent className="p-3 sm:p-4 md:p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center">
                 <Filter className="w-5 h-5 text-purple-400 mr-2" />
