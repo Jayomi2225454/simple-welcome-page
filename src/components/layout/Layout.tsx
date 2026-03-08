@@ -41,7 +41,7 @@ const Layout = forwardRef<HTMLDivElement, LayoutProps>(({ children }, ref) => {
       <main className="flex-1">{children}</main>
       <Footer />
       {chatbotEnabled && <AIChatbot />}
-      <LiveSupportChat />
+      
     </div>
   );
 });

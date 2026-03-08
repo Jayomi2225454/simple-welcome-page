@@ -231,6 +231,13 @@ const Header = () => {
                   <DropdownMenuSeparator className="bg-gray-700" />
                   <DropdownMenuItem 
                     className="text-gray-300 hover:text-white hover:bg-gray-700 cursor-pointer"
+                    onClick={() => setShowLiveChat(true)}
+                  >
+                    <Headphones className="mr-2 h-4 w-4" />
+                    <span>Live Support</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    className="text-gray-300 hover:text-white hover:bg-gray-700 cursor-pointer"
                     onClick={handleWhatsAppSupport}
                   >
                     <MessageCircle className="mr-2 h-4 w-4" />
