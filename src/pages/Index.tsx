@@ -237,9 +237,9 @@ const Index = () => {
                     </div>
                   </div>
                   
-                  <div className="text-center mb-6">
-                    <h3 className="text-white font-bold text-lg mb-2">Apex Legends Showdown</h3>
-                    <div className="text-sm text-gray-400">{new Date(match.start_time).toLocaleTimeString()}</div>
+                  <div className="text-center mb-4 sm:mb-6">
+                    <h3 className="text-white font-bold text-base sm:text-lg mb-2">Apex Legends Showdown</h3>
+                    <div className="text-xs sm:text-sm text-gray-400">{new Date(match.start_time).toLocaleTimeString()}</div>
                   </div>
                   
                   <div className="flex items-center justify-between mb-6">
