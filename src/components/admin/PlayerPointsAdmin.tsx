@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -124,11 +125,16 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
     setPositionPoints(prev => prev.map((p, i) => i === index ? { ...p, [field]: value } : p));
   };
 
+  const getPositionBonus = (position: number) => {
+    const entry = positionPoints.find(p => p.position === position);
+    return entry ? entry.points : 0;
+  };
+
   const recalculateAllPoints = () => {
     setTeams(prev => prev.map(team => {
       const members = team.members.map(m => ({
         ...m,
-        points: m.kills * killPointsValue + m.wins * winPointsValue,
+        points: m.kills * killPointsValue + getPositionBonus(m.wins),
       }));
       return {
         ...team,
@@ -275,8 +281,8 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
       const members = team.members.map(m => {
         if (m.user_id !== userId) return m;
         const updated = { ...m, [field]: value };
-        // Auto-calculate points
-        updated.points = updated.kills * killPointsValue + updated.wins * winPointsValue;
+        // Auto-calculate points: kills × multiplier + position bonus
+        updated.points = updated.kills * killPointsValue + getPositionBonus(updated.wins);
         return updated;
       });
       return {
@@ -400,40 +406,26 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
           </div>
           {!showSettings && (
             <p className="text-xs text-muted-foreground mt-1">
-              1 Kill = <span className="text-primary font-bold">{killPointsValue}</span> pts · 1 Win = <span className="text-primary font-bold">{winPointsValue}</span> pts
+              1 Kill = <span className="text-primary font-bold">{killPointsValue}</span> pts
               {positionPoints.length > 0 && (
-                <> · <span className="text-amber-400 font-bold">{positionPoints.length}</span> position bonuses</>
+                <> · <span className="text-amber-400 font-bold">{positionPoints.length}</span> position bonuses configured</>
               )}
             </p>
           )}
         </CardHeader>
         {showSettings && (
           <CardContent className="pt-0">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
-                  <Crosshair className="w-3.5 h-3.5 text-red-400" /> Points per Kill
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={killPointsValue}
-                  onChange={e => setKillPointsValue(parseInt(e.target.value) || 0)}
-                  className="bg-secondary border-border text-foreground h-9"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
-                  <Award className="w-3.5 h-3.5 text-yellow-400" /> Points per Win
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={winPointsValue}
-                  onChange={e => setWinPointsValue(parseInt(e.target.value) || 0)}
-                  className="bg-secondary border-border text-foreground h-9"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
+                <Crosshair className="w-3.5 h-3.5 text-red-400" /> Points per Kill
+              </Label>
+              <Input
+                type="number"
+                min={0}
+                value={killPointsValue}
+                onChange={e => setKillPointsValue(parseInt(e.target.value) || 0)}
+                className="bg-secondary border-border text-foreground h-9"
+              />
             </div>
 
             {/* Position Points Section */}
@@ -495,7 +487,7 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                 Save & Recalculate
               </Button>
               <p className="text-xs text-muted-foreground">
-                Formula: <span className="text-foreground font-mono">(Kills × {killPointsValue}) + (Wins × {winPointsValue}){positionPoints.length > 0 ? ' + Position Bonus' : ''} = Total Points</span>
+                Formula: <span className="text-foreground font-mono">(Kills × {killPointsValue}) + Position Bonus = Total Points</span>
               </p>
             </div>
           </CardContent>
@@ -560,7 +552,7 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                 Registered Teams & Player Points
               </CardTitle>
               <CardDescription className="mt-1">
-                Manage kills & wins — points auto-calculate using multipliers
+                Manage kills & position — points auto-calculate: (Kills × {killPointsValue}) + Position Bonus
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -610,9 +602,9 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                       <Crosshair className="w-3 h-3 text-red-400" />
                       <span className="text-red-400 font-bold text-sm">{team.totalKills}</span>
                     </div>
-                    <div className="hidden sm:flex items-center gap-1.5 bg-yellow-500/10 rounded-md px-2.5 py-1">
-                      <Award className="w-3 h-3 text-yellow-400" />
-                      <span className="text-yellow-400 font-bold text-sm">{team.totalWins}</span>
+                    <div className="hidden sm:flex items-center gap-1.5 bg-amber-500/10 rounded-md px-2.5 py-1">
+                      <Medal className="w-3 h-3 text-amber-400" />
+                      <span className="text-amber-400 font-bold text-sm">#{team.totalWins || '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -695,15 +687,25 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                             />
                           </div>
                           <div className="text-center">
-                            <label className="text-[10px] text-yellow-400 flex items-center gap-0.5 justify-center mb-0.5">
-                              <Award className="w-2.5 h-2.5" /> Wins
+                            <label className="text-[10px] text-amber-400 flex items-center gap-0.5 justify-center mb-0.5">
+                              <Medal className="w-2.5 h-2.5" /> Position
                             </label>
-                            <Input
-                              type="number"
-                              value={member.wins}
-                              onChange={e => updatePlayerField(team.id, member.user_id, 'wins', parseInt(e.target.value) || 0)}
-                              className="bg-secondary border-border text-foreground w-16 h-8 text-sm text-center"
-                            />
+                            <Select
+                              value={String(member.wins || 0)}
+                              onValueChange={(v) => updatePlayerField(team.id, member.user_id, 'wins', parseInt(v))}
+                            >
+                              <SelectTrigger className="bg-secondary border-border text-foreground w-20 h-8 text-sm">
+                                <SelectValue placeholder="-" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-background border-border">
+                                <SelectItem value="0">-</SelectItem>
+                                {[1,2,3,4,5,6,7,8,9,10].map(pos => (
+                                  <SelectItem key={pos} value={String(pos)}>
+                                    #{pos} {getPositionBonus(pos) > 0 ? `(+${getPositionBonus(pos)})` : ''}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div className="text-center">
                             <label className="text-[10px] text-green-400 flex items-center gap-0.5 justify-center mb-0.5">
@@ -724,7 +726,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                     </span>
                     <div className="flex items-center gap-3">
                       <span className="text-red-400 font-bold text-sm">{team.totalKills} kills</span>
-                      <span className="text-yellow-400 font-bold text-sm">{team.totalWins} wins</span>
                       <span className="text-green-400 font-bold text-base">{team.totalPoints} pts</span>
                     </div>
                   </div>
