@@ -725,7 +725,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                     </span>
                     <div className="flex items-center gap-3">
                       <span className="text-red-400 font-bold text-sm">{team.totalKills} kills</span>
-                      <span className="text-yellow-400 font-bold text-sm">{team.totalWins} wins</span>
                       <span className="text-green-400 font-bold text-base">{team.totalPoints} pts</span>
                     </div>
                   </div>
