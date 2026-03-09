@@ -1103,6 +1103,7 @@ export type Database = {
           group_name: string | null
           id: string
           kills: number
+          match_number: number
           points: number
           position: number
           position_in_group: number | null
@@ -1117,6 +1118,7 @@ export type Database = {
           group_name?: string | null
           id?: string
           kills?: number
+          match_number?: number
           points?: number
           position?: number
           position_in_group?: number | null
@@ -1131,6 +1133,7 @@ export type Database = {
           group_name?: string | null
           id?: string
           kills?: number
+          match_number?: number
           points?: number
           position?: number
           position_in_group?: number | null
