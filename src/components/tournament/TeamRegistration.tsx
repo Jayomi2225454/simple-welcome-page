@@ -899,6 +899,18 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
               ))}
             </div>
 
+            {/* Edit Registration Details Button */}
+            {userRegistration && (
+              <Button
+                onClick={() => setShowEditDialog(true)}
+                variant="outline"
+                className="w-full border-purple-500/30 text-purple-300 hover:bg-purple-500/10 hover:text-purple-200"
+              >
+                <Edit3 className="w-4 h-4 mr-2" />
+                Edit Registration Details
+              </Button>
+            )}
+
             {!userTeam.is_full && (
               <div className="p-3 bg-yellow-500/10 border border-yellow-400/30 rounded-lg">
                 <p className="text-sm text-yellow-200">
