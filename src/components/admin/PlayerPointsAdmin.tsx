@@ -48,18 +48,30 @@ interface RegisteredTeam {
   totalWins: number;
 }
 
-interface PlayerPointsAdminProps {
-  tournamentId: string;
+// Aggregated team for final table
+interface AggregatedTeam {
+  id: string;
+  team_name: string;
+  members: { user_id: string; player_name: string; totalKills: number; totalPoints: number; bestPosition: number }[];
+  totalPoints: number;
+  totalKills: number;
 }
 
-const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
+interface PlayerPointsAdminProps {
+  tournamentId: string;
+  selectedMatch: number;
+  totalMatches: number;
+}
+
+const PlayerPointsAdmin = ({ tournamentId, selectedMatch, totalMatches }: PlayerPointsAdminProps) => {
   const { toast } = useToast();
   const [teams, setTeams] = useState<RegisteredTeam[]>([]);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
+  const [showFinalTable, setShowFinalTable] = useState(false);
+  const [aggregatedTeams, setAggregatedTeams] = useState<AggregatedTeam[]>([]);
   const [killPointsValue, setKillPointsValue] = useState(1);
   const [winPointsValue, setWinPointsValue] = useState(1);
   const [positionPoints, setPositionPoints] = useState<{ position: number; points: number }[]>([]);
@@ -71,9 +83,14 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
   useEffect(() => {
     if (tournamentId) {
       loadPointSettings();
-      loadTeamsAndPlayers();
     }
   }, [tournamentId]);
+
+  useEffect(() => {
+    if (tournamentId) {
+      loadTeamsAndPlayers();
+    }
+  }, [tournamentId, selectedMatch]);
 
   const loadPointSettings = async () => {
     try {
@@ -107,7 +124,7 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
         } as any)
         .eq('id', tournamentId);
       if (error) throw error;
-      toast({ title: 'Settings Saved', description: `1 Kill = ${killPointsValue} pts, 1 Win = ${winPointsValue} pts` });
+      toast({ title: 'Settings Saved', description: `1 Kill = ${killPointsValue} pts` });
       recalculateAllPoints();
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -195,7 +212,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
         });
       }
 
-      // Load registration data for these users in this tournament
       let registrationMap: Record<string, RegistrationData> = {};
       if (userIds.length > 0) {
         const { data: regs } = await supabase
@@ -214,10 +230,12 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
         });
       }
 
+      // Load player points for the SELECTED MATCH only
       const { data: playerPoints } = await supabase
         .from('tournament_player_points')
         .select('*')
-        .eq('tournament_id', tournamentId);
+        .eq('tournament_id', tournamentId)
+        .eq('match_number', selectedMatch);
 
       const pointsMap: Record<string, { points: number; kills: number; wins: number }> = {};
       (playerPoints || []).forEach(pp => {
@@ -267,6 +285,62 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
     }
   };
 
+  // Load aggregated data across all matches for the final table
+  const loadAggregatedData = async () => {
+    try {
+      const { data: allPoints } = await supabase
+        .from('tournament_player_points')
+        .select('*')
+        .eq('tournament_id', tournamentId);
+
+      const { data: teamsData } = await supabase
+        .from('tournament_teams')
+        .select('id, team_name')
+        .eq('tournament_id', tournamentId);
+
+      if (!teamsData || !allPoints) return;
+
+      const aggTeams: AggregatedTeam[] = teamsData.map(team => {
+        const teamPoints = allPoints.filter(p => p.team_id === team.id);
+        const playerMap = new Map<string, { user_id: string; player_name: string; totalKills: number; totalPoints: number; bestPosition: number }>();
+
+        teamPoints.forEach(pp => {
+          const existing = playerMap.get(pp.user_id);
+          if (existing) {
+            existing.totalKills += pp.kills;
+            existing.totalPoints += pp.points;
+            if (pp.wins > 0 && (existing.bestPosition === 0 || pp.wins < existing.bestPosition)) {
+              existing.bestPosition = pp.wins;
+            }
+          } else {
+            playerMap.set(pp.user_id, {
+              user_id: pp.user_id,
+              player_name: pp.player_name,
+              totalKills: pp.kills,
+              totalPoints: pp.points,
+              bestPosition: pp.wins || 0,
+            });
+          }
+        });
+
+        const members = Array.from(playerMap.values());
+        return {
+          id: team.id,
+          team_name: team.team_name,
+          members,
+          totalPoints: members.reduce((s, m) => s + m.totalPoints, 0),
+          totalKills: members.reduce((s, m) => s + m.totalKills, 0),
+        };
+      });
+
+      // Sort by total points descending
+      aggTeams.sort((a, b) => b.totalPoints - a.totalPoints);
+      setAggregatedTeams(aggTeams);
+    } catch (error: any) {
+      console.error('Error loading aggregated data:', error);
+    }
+  };
+
   const toggleTeam = (teamId: string) => {
     setExpandedTeams(prev => {
       const next = new Set(prev);
@@ -279,7 +353,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
   const expandAll = () => setExpandedTeams(new Set(teams.map(t => t.id)));
   const collapseAll = () => setExpandedTeams(new Set());
 
-  // Keep teamsRef in sync
   useEffect(() => {
     teamsRef.current = teams;
   }, [teams]);
@@ -291,34 +364,81 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
     try {
       for (const team of currentTeams) {
         for (const member of team.members) {
-          const { error } = await supabase
+          // Check if record exists for this specific match
+          const { data: existingPlayer } = await supabase
             .from('tournament_player_points')
-            .upsert({
-              tournament_id: tournamentId,
-              team_id: team.id,
-              user_id: member.user_id,
-              player_name: member.player_name,
-              points: member.points,
-              kills: member.kills,
-              wins: member.wins,
-            }, { onConflict: 'tournament_id,team_id,user_id' });
-          if (error) throw error;
-        }
+            .select('id')
+            .eq('tournament_id', tournamentId)
+            .eq('team_id', team.id)
+            .eq('user_id', member.user_id)
+            .eq('match_number', selectedMatch)
+            .maybeSingle();
 
+          if (existingPlayer) {
+            const { error } = await supabase
+              .from('tournament_player_points')
+              .update({
+                player_name: member.player_name,
+                points: member.points,
+                kills: member.kills,
+                wins: member.wins,
+              })
+              .eq('id', existingPlayer.id);
+            if (error) throw error;
+          } else {
+            const { error } = await supabase
+              .from('tournament_player_points')
+              .insert({
+                tournament_id: tournamentId,
+                team_id: team.id,
+                user_id: member.user_id,
+                player_name: member.player_name,
+                points: member.points,
+                kills: member.kills,
+                wins: member.wins,
+                match_number: selectedMatch,
+              });
+            if (error) throw error;
+          }
+        }
+      }
+      // Sync aggregated totals to tournament_points so user-facing table shows correct data
+      await syncTeamTotalsToTournamentPoints(currentTeams);
+
+      isDirtyRef.current = false;
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (error: any) {
+      console.error('Auto-save error:', error);
+      setSaveStatus('idle');
+      toast({ title: 'Auto-save failed', description: error.message, variant: 'destructive' });
+    }
+  }, [tournamentId, selectedMatch, toast]);
+
+  // Sync team totals from player points to tournament_points table
+  const syncTeamTotalsToTournamentPoints = async (currentTeams: RegisteredTeam[]) => {
+    try {
+      for (const team of currentTeams) {
+        const teamKills = team.members.reduce((s, m) => s + m.kills, 0);
+        const teamPoints = team.members.reduce((s, m) => s + m.points, 0);
+        const teamWins = team.members.reduce((s, m) => s + m.wins, 0);
+
+        // Check if tournament_points entry exists for this team+match
         const { data: existing } = await supabase
           .from('tournament_points')
           .select('id')
           .eq('tournament_id', tournamentId)
           .eq('team_id', team.id)
+          .eq('match_number', selectedMatch)
           .maybeSingle();
 
         if (existing) {
           await supabase
             .from('tournament_points')
             .update({
-              points: team.totalPoints,
-              kills: team.totalKills,
-              wins: team.totalWins,
+              kills: teamKills,
+              points: teamPoints,
+              wins: teamWins,
             })
             .eq('id', existing.id);
         } else {
@@ -328,22 +448,35 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
               tournament_id: tournamentId,
               team_id: team.id,
               team_name: team.team_name,
-              points: team.totalPoints,
-              kills: team.totalKills,
-              wins: team.totalWins,
+              kills: teamKills,
+              points: teamPoints,
+              wins: teamWins,
               position: 1,
+              match_number: selectedMatch,
             });
         }
       }
-      isDirtyRef.current = false;
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 2000);
+
+      // Now recalculate positions for this match
+      const { data: matchEntries } = await supabase
+        .from('tournament_points')
+        .select('id, points')
+        .eq('tournament_id', tournamentId)
+        .eq('match_number', selectedMatch)
+        .order('points', { ascending: false });
+
+      if (matchEntries) {
+        for (let i = 0; i < matchEntries.length; i++) {
+          await supabase
+            .from('tournament_points')
+            .update({ position: i + 1 })
+            .eq('id', matchEntries[i].id);
+        }
+      }
     } catch (error: any) {
-      console.error('Auto-save error:', error);
-      setSaveStatus('idle');
-      toast({ title: 'Auto-save failed', description: error.message, variant: 'destructive' });
+      console.error('Error syncing team totals:', error);
     }
-  }, [tournamentId, toast]);
+  };
 
   const triggerAutoSave = useCallback(() => {
     isDirtyRef.current = true;
@@ -354,7 +487,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
     }, 1500);
   }, [autoSave]);
 
-  // Cleanup debounce on unmount
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -367,7 +499,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
       const members = team.members.map(m => {
         if (m.user_id !== userId) return m;
         const updated = { ...m, [field]: value };
-        // Auto-calculate points: kills × multiplier + position bonus
         updated.points = updated.kills * killPointsValue + getPositionBonus(updated.wins);
         return updated;
       });
@@ -409,7 +540,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
 
   const totalAllPoints = teams.reduce((s, t) => s + t.totalPoints, 0);
   const totalAllKills = teams.reduce((s, t) => s + t.totalKills, 0);
-  const totalAllWins = teams.reduce((s, t) => s + t.totalWins, 0);
   const totalPlayers = teams.reduce((s, t) => s + t.members.length, 0);
 
   return (
@@ -422,12 +552,7 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
               <Settings className="w-4 h-4 text-primary" />
               Point Multiplier Settings
             </CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowSettings(!showSettings)}
-              className="text-xs"
-            >
+            <Button variant="ghost" size="sm" onClick={() => setShowSettings(!showSettings)} className="text-xs">
               {showSettings ? 'Hide' : 'Configure'}
             </Button>
           </div>
@@ -455,7 +580,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
               />
             </div>
 
-            {/* Position Points Section */}
             <div className="mt-4 pt-4 border-t border-border">
               <div className="flex items-center justify-between mb-3">
                 <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
@@ -504,7 +628,7 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                     ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">No position points configured. Add positions to award bonus points based on placement.</p>
+                <p className="text-xs text-muted-foreground">No position points configured.</p>
               )}
             </div>
 
@@ -525,83 +649,56 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="bg-card border-border">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Users className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-foreground">{teams.length}</p>
-              <p className="text-xs text-muted-foreground">Teams</p>
-            </div>
+            <div className="p-2 rounded-lg bg-primary/10"><Users className="w-5 h-5 text-primary" /></div>
+            <div><p className="text-2xl font-bold text-foreground">{teams.length}</p><p className="text-xs text-muted-foreground">Teams</p></div>
           </CardContent>
         </Card>
         <Card className="bg-card border-border">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-500/10">
-              <User className="w-5 h-5 text-blue-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-foreground">{totalPlayers}</p>
-              <p className="text-xs text-muted-foreground">Players</p>
-            </div>
+            <div className="p-2 rounded-lg bg-blue-500/10"><User className="w-5 h-5 text-blue-400" /></div>
+            <div><p className="text-2xl font-bold text-foreground">{totalPlayers}</p><p className="text-xs text-muted-foreground">Players</p></div>
           </CardContent>
         </Card>
         <Card className="bg-card border-border">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-500/10">
-              <Trophy className="w-5 h-5 text-green-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-foreground">{totalAllPoints}</p>
-              <p className="text-xs text-muted-foreground">Total Points</p>
-            </div>
+            <div className="p-2 rounded-lg bg-green-500/10"><Trophy className="w-5 h-5 text-green-400" /></div>
+            <div><p className="text-2xl font-bold text-foreground">{totalAllPoints}</p><p className="text-xs text-muted-foreground">Match {selectedMatch} Points</p></div>
           </CardContent>
         </Card>
         <Card className="bg-card border-border">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-red-500/10">
-              <Crosshair className="w-5 h-5 text-red-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-foreground">{totalAllKills}</p>
-              <p className="text-xs text-muted-foreground">Total Kills</p>
-            </div>
+            <div className="p-2 rounded-lg bg-red-500/10"><Crosshair className="w-5 h-5 text-red-400" /></div>
+            <div><p className="text-2xl font-bold text-foreground">{totalAllKills}</p><p className="text-xs text-muted-foreground">Match {selectedMatch} Kills</p></div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Main Card */}
+      {/* Per-Match Teams Card */}
       <Card className="bg-card border-border">
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle className="text-foreground flex items-center gap-2 text-lg">
                 <Users className="w-5 h-5 text-primary" />
-                Registered Teams & Player Points
+                Match {selectedMatch} — Player Points
               </CardTitle>
               <CardDescription className="mt-1">
-                Manage kills & position — points auto-calculate: (Kills × {killPointsValue}) + Position Bonus
+                Manage kills & position for Match {selectedMatch}. Points auto-calculate: (Kills × {killPointsValue}) + Position Bonus
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Auto-save status indicator */}
               {saveStatus === 'saving' && (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
-                  <CloudUpload className="w-3.5 h-3.5" />
-                  <span>Saving...</span>
+                  <CloudUpload className="w-3.5 h-3.5" /><span>Saving...</span>
                 </div>
               )}
               {saveStatus === 'saved' && (
                 <div className="flex items-center gap-1.5 text-xs text-green-400">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Saved</span>
+                  <Check className="w-3.5 h-3.5" /><span>Saved</span>
                 </div>
               )}
-              <Button onClick={expandAll} variant="ghost" size="sm" className="text-xs h-8 text-muted-foreground">
-                Expand All
-              </Button>
-              <Button onClick={collapseAll} variant="ghost" size="sm" className="text-xs h-8 text-muted-foreground">
-                Collapse All
-              </Button>
+              <Button onClick={expandAll} variant="ghost" size="sm" className="text-xs h-8 text-muted-foreground">Expand All</Button>
+              <Button onClick={collapseAll} variant="ghost" size="sm" className="text-xs h-8 text-muted-foreground">Collapse All</Button>
               <Button onClick={loadTeamsAndPlayers} variant="outline" size="sm" className="h-8">
                 <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
               </Button>
@@ -615,11 +712,7 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                 <div className="group flex items-center justify-between p-3 bg-secondary/50 rounded-lg cursor-pointer hover:bg-secondary/80 transition-all border border-transparent hover:border-border">
                   <div className="flex items-center gap-3">
                     <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary/10 text-primary text-xs font-bold">
-                      {expandedTeams.has(team.id) ? (
-                        <ChevronDown className="w-4 h-4" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4" />
-                      )}
+                      {expandedTeams.has(team.id) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground text-xs font-mono">#{index + 1}</span>
@@ -638,21 +731,14 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                       <Crosshair className="w-3 h-3 text-red-400" />
                       <span className="text-red-400 font-bold text-sm">{team.totalKills}</span>
                     </div>
-                    <div className="hidden sm:flex items-center gap-1.5 bg-amber-500/10 rounded-md px-2.5 py-1">
-                      <Medal className="w-3 h-3 text-amber-400" />
-                      <span className="text-amber-400 font-bold text-sm">#{team.totalWins || '-'}</span>
-                    </div>
                   </div>
                 </div>
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="ml-4 sm:ml-10 mt-1 mb-2 border border-border rounded-lg overflow-hidden bg-card/50">
-                  {/* Player Details Cards */}
                   {team.members.map(member => (
                     <div key={member.user_id} className="border-b border-border last:border-b-0">
-                      {/* Player Info Row */}
                       <div className="p-3 flex flex-col sm:flex-row sm:items-center gap-3">
-                        {/* Avatar + Name */}
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                             {member.profile?.avatar_url ? (
@@ -675,7 +761,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                                 {member.role === 'captain' ? '👑 Captain' : member.role}
                               </Badge>
                             </div>
-                            {/* Profile & Registration details */}
                             <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                               {member.registration?.game_id && (
                                 <span className="text-[11px] text-muted-foreground flex items-center gap-1">
@@ -693,7 +778,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                                 </span>
                               )}
                             </div>
-                            {/* Custom registration fields */}
                             {member.registration?.custom_fields_data && Object.keys(member.registration.custom_fields_data).filter(k => !k.startsWith('rejection_')).length > 0 && (
                               <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                                 {Object.entries(member.registration.custom_fields_data)
@@ -709,7 +793,6 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                           </div>
                         </div>
 
-                        {/* Kills, Wins, Points inputs */}
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <div className="text-center">
                             <label className="text-[10px] text-red-400 flex items-center gap-0.5 justify-center mb-0.5">
@@ -733,9 +816,9 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                               <SelectTrigger className="bg-secondary border-border text-foreground w-20 h-8 text-sm">
                                 <SelectValue placeholder="-" />
                               </SelectTrigger>
-                              <SelectContent className="bg-background border-border">
+                              <SelectContent className="bg-background border-border max-h-60">
                                 <SelectItem value="0">-</SelectItem>
-                                {[1,2,3,4,5,6,7,8,9,10].map(pos => (
+                                {Array.from({ length: Math.max(teams.length, 30) }, (_, i) => i + 1).map(pos => (
                                   <SelectItem key={pos} value={String(pos)}>
                                     #{pos} {getPositionBonus(pos) > 0 ? `(+${getPositionBonus(pos)})` : ''}
                                   </SelectItem>
@@ -755,10 +838,9 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
                       </div>
                     </div>
                   ))}
-                  {/* Team Total Row */}
                   <div className="bg-primary/5 px-3 py-2.5 flex items-center justify-between">
                     <span className="text-primary font-bold text-sm flex items-center gap-1.5">
-                      <Hash className="w-3.5 h-3.5" /> Team Total
+                      <Hash className="w-3.5 h-3.5" /> Team Total (Match {selectedMatch})
                     </span>
                     <div className="flex items-center gap-3">
                       <span className="text-red-400 font-bold text-sm">{team.totalKills} kills</span>
@@ -771,6 +853,74 @@ const PlayerPointsAdmin = ({ tournamentId }: PlayerPointsAdminProps) => {
           ))}
         </CardContent>
       </Card>
+
+      {/* Final Aggregated Table - show when multiple matches */}
+      {totalMatches > 1 && (
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-foreground flex items-center gap-2 text-lg">
+                <Trophy className="w-5 h-5 text-amber-400" />
+                Final Aggregated Points (All {totalMatches} Matches)
+              </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowFinalTable(!showFinalTable);
+                  if (!showFinalTable) loadAggregatedData();
+                }}
+              >
+                {showFinalTable ? 'Hide' : 'Show Final Table'}
+              </Button>
+            </div>
+            <CardDescription>Combined totals across all matches — this is what users see.</CardDescription>
+          </CardHeader>
+          {showFinalTable && (
+            <CardContent className="pt-0">
+              {aggregatedTeams.length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-6">No data yet. Add points in individual matches first.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-border">
+                        <TableHead className="text-muted-foreground">#</TableHead>
+                        <TableHead className="text-muted-foreground">Team</TableHead>
+                        <TableHead className="text-muted-foreground text-center">Total Kills</TableHead>
+                        <TableHead className="text-muted-foreground text-center">Total Points</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {aggregatedTeams.map((team, idx) => (
+                        <TableRow key={team.id} className="border-border">
+                          <TableCell className="text-foreground font-bold">
+                            {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <span className="text-foreground font-semibold">{team.team_name}</span>
+                              <div className="text-[11px] text-muted-foreground mt-0.5">
+                                {team.members.map(m => m.player_name).join(', ')}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <span className="text-red-400 font-bold">{team.totalKills}</span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <span className="text-green-400 font-bold text-lg">{team.totalPoints}</span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          )}
+        </Card>
+      )}
     </div>
   );
 };
