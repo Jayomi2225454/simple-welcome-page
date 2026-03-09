@@ -11,6 +11,7 @@ import { Users, Crown, UserPlus, Copy, CheckCircle, Clock, Lock, Hash, XCircle, 
 import { tournamentRegistrationService, TournamentRoom } from '@/services/tournamentRegistrationService';
 import RegistrationFormDialog from './RegistrationFormDialog';
 import PaymentRetryDialog from './PaymentRetryDialog';
+import EditRegistrationDialog from './EditRegistrationDialog';
 import { Link } from 'react-router-dom';
 
 interface TeamRegistrationProps {
