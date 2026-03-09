@@ -42,6 +42,7 @@ interface PlayerPoint {
   points: number;
   team_id: string;
   user_id: string;
+  match_number?: number;
 }
 
 interface TournamentPointsTableProps {
@@ -143,9 +144,37 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
   const hasMultipleMatches = matchNumbers.length > 1;
 
   // Aggregate entries across matches or show single match
+  // ALWAYS use playerPoints as the single source of truth for kills/points/wins
   const pointsEntries: AggregatedEntry[] = useMemo(() => {
+    // Build a lookup: team_id+match_number -> sum of all player stats
+    const playerAgg = new Map<string, { kills: number; points: number; wins: number }>();
+    for (const pp of playerPoints) {
+      const matchNum = (pp as any).match_number || 1;
+      const key = `${pp.team_id}_${matchNum}`;
+      if (!playerAgg.has(key)) {
+        playerAgg.set(key, { kills: 0, points: 0, wins: 0 });
+      }
+      const agg = playerAgg.get(key)!;
+      agg.kills += pp.kills;
+      agg.points += pp.points;
+      agg.wins += pp.wins;
+    }
+
+    // Also build a total per team from playerPoints directly (not from rawEntries)
+    const playerTotalAgg = new Map<string, { kills: number; points: number; wins: number }>();
+    for (const pp of playerPoints) {
+      const key = pp.team_id;
+      if (!playerTotalAgg.has(key)) {
+        playerTotalAgg.set(key, { kills: 0, points: 0, wins: 0 });
+      }
+      const agg = playerTotalAgg.get(key)!;
+      agg.kills += pp.kills;
+      agg.points += pp.points;
+      agg.wins += pp.wins;
+    }
+
     if (viewMode === 'total') {
-      // Aggregate by team_id
+      // Aggregate by team_id across all matches
       const teamMap = new Map<string, AggregatedEntry>();
       for (const entry of rawEntries) {
         const key = entry.team_id;
@@ -163,16 +192,37 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
           });
         }
         const agg = teamMap.get(key)!;
-        agg.points += entry.points;
-        agg.kills += entry.kills;
-        agg.wins += entry.wins;
+        // Use player-aggregated data for this match
+        const playerKey = `${entry.team_id}_${entry.match_number || 1}`;
+        const playerData = playerAgg.get(playerKey);
+        const matchKills = playerData ? playerData.kills : 0;
+        const matchPoints = playerData ? playerData.points : 0;
+        const matchWins = playerData ? playerData.wins : 0;
+        
         agg.matchBreakdown.push({
           match_number: entry.match_number || 1,
-          points: entry.points,
-          kills: entry.kills,
-          wins: entry.wins,
+          points: matchPoints,
+          kills: matchKills,
+          wins: matchWins,
         });
       }
+
+      // Now set team totals from playerTotalAgg (source of truth)
+      for (const [teamId, agg] of teamMap) {
+        const totals = playerTotalAgg.get(teamId);
+        if (totals) {
+          agg.kills = totals.kills;
+          agg.points = totals.points;
+          agg.wins = totals.wins;
+        } else {
+          // Fallback: sum from rawEntries if no player data exists
+          const teamEntries = rawEntries.filter(e => e.team_id === teamId);
+          agg.kills = teamEntries.reduce((s, e) => s + e.kills, 0);
+          agg.points = teamEntries.reduce((s, e) => s + e.points, 0);
+          agg.wins = teamEntries.reduce((s, e) => s + e.wins, 0);
+        }
+      }
+
       // Sort and assign positions
       const sorted = Array.from(teamMap.values()).sort((a, b) => b.points - a.points);
       sorted.forEach((entry, idx) => { entry.position = idx + 1; });
@@ -193,16 +243,27 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
       }
       return sorted;
     } else {
-      // Show single match
+      // Show single match - use player-aggregated data
       const matchEntries = rawEntries.filter(e => (e.match_number || 1) === viewMode);
       return matchEntries
-        .sort((a, b) => a.position - b.position)
-        .map(e => ({
-          ...e,
-          matchBreakdown: [{ match_number: e.match_number || 1, points: e.points, kills: e.kills, wins: e.wins }],
-        }));
+        .map(e => {
+          const playerKey = `${e.team_id}_${e.match_number || 1}`;
+          const playerData = playerAgg.get(playerKey);
+          const kills = playerData ? playerData.kills : 0;
+          const points = playerData ? playerData.points : 0;
+          const wins = playerData ? playerData.wins : 0;
+          return {
+            ...e,
+            kills,
+            points,
+            wins,
+            matchBreakdown: [{ match_number: e.match_number || 1, points, kills, wins }],
+          };
+        })
+        .sort((a, b) => b.points - a.points)
+        .map((e, idx) => ({ ...e, position: idx + 1 }));
     }
-  }, [rawEntries, viewMode, displayMode]);
+  }, [rawEntries, playerPoints, viewMode, displayMode]);
 
   const toggleTeam = (teamId: string) => {
     setExpandedTeams(prev => {
@@ -264,7 +325,30 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
     );
   }
 
-  const getTeamPlayers = (teamId: string) => playerPoints.filter(p => p.team_id === teamId);
+  // Aggregate player points across all matches for a team
+  const getTeamPlayers = (teamId: string) => {
+    if (viewMode === 'total') {
+      // Aggregate across all matches
+      const teamPlayerPoints = playerPoints.filter(p => p.team_id === teamId);
+      const playerMap = new Map<string, PlayerPoint>();
+      for (const pp of teamPlayerPoints) {
+        const key = pp.user_id;
+        if (playerMap.has(key)) {
+          const existing = playerMap.get(key)!;
+          existing.kills += pp.kills;
+          existing.points += pp.points;
+          existing.wins += pp.wins;
+        } else {
+          playerMap.set(key, { ...pp });
+        }
+      }
+      return Array.from(playerMap.values()).sort((a, b) => b.points - a.points);
+    }
+    // Single match view - filter by match_number
+    return playerPoints
+      .filter(p => p.team_id === teamId && (p as any).match_number === viewMode)
+      .sort((a, b) => b.points - a.points);
+  };
 
   const renderStandingsRow = (entry: AggregatedEntry, idx: number) => {
     const barWidth = (entry.points / maxPoints) * 100;
