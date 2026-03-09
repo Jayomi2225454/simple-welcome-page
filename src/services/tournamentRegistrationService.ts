@@ -165,6 +165,22 @@ export const tournamentRegistrationService = {
     return data as TournamentRoom | null;
   },
 
+  async updateRegistrationDetails(
+    registrationId: string, 
+    updates: { game_id?: string; custom_fields_data?: Record<string, string> }
+  ): Promise<void> {
+    const updatePayload: any = {};
+    if (updates.game_id !== undefined) updatePayload.game_id = updates.game_id;
+    if (updates.custom_fields_data !== undefined) updatePayload.custom_fields_data = updates.custom_fields_data;
+
+    const { error } = await supabase
+      .from('tournament_registrations')
+      .update(updatePayload)
+      .eq('id', registrationId);
+
+    if (error) throw error;
+  },
+
   async upsertTournamentRoom(tournamentId: string, roomData: Partial<Pick<TournamentRoom, 'room_id' | 'room_password'>>): Promise<TournamentRoom> {
     const { data, error } = await supabase
       .from('tournament_rooms')

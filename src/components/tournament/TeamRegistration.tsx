@@ -7,10 +7,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Tournament } from '@/types';
-import { Users, Crown, UserPlus, Copy, CheckCircle, Clock, Lock, Hash, XCircle, AlertTriangle, RefreshCw, Trash2, Wallet } from 'lucide-react';
+import { Users, Crown, UserPlus, Copy, CheckCircle, Clock, Lock, Hash, XCircle, AlertTriangle, RefreshCw, Trash2, Wallet, Edit3 } from 'lucide-react';
 import { tournamentRegistrationService, TournamentRoom } from '@/services/tournamentRegistrationService';
 import RegistrationFormDialog from './RegistrationFormDialog';
 import PaymentRetryDialog from './PaymentRetryDialog';
+import EditRegistrationDialog from './EditRegistrationDialog';
 import { Link } from 'react-router-dom';
 
 interface TeamRegistrationProps {
@@ -58,6 +59,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
   // Dialog states for registration flow
   const [showRegistrationDialog, setShowRegistrationDialog] = useState(false);
   const [showPaymentRetryDialog, setShowPaymentRetryDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [pendingTeamAction, setPendingTeamAction] = useState<{ type: 'create' | 'join' | 'join_by_code'; teamId?: string } | null>(null);
   
   const { user } = useAuth();
@@ -897,6 +899,18 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
               ))}
             </div>
 
+            {/* Edit Registration Details Button */}
+            {userRegistration && (
+              <Button
+                onClick={() => setShowEditDialog(true)}
+                variant="outline"
+                className="w-full border-purple-500/30 text-purple-300 hover:bg-purple-500/10 hover:text-purple-200"
+              >
+                <Edit3 className="w-4 h-4 mr-2" />
+                Edit Registration Details
+              </Button>
+            )}
+
             {!userTeam.is_full && (
               <div className="p-3 bg-yellow-500/10 border border-yellow-400/30 rounded-lg">
                 <p className="text-sm text-yellow-200">
@@ -1148,6 +1162,20 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         isPaid={!isFree}
         entryFee={isLeaderPays ? totalLeaderAmount : entryFeeAmount}
       />
+
+      {/* Edit Registration Dialog */}
+      {userRegistration && (
+        <EditRegistrationDialog
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          registration={userRegistration}
+          tournamentId={tournament.id}
+          onUpdated={() => {
+            loadUserData();
+            loadAvailableTeams();
+          }}
+        />
+      )}
     </div>
   );
 };

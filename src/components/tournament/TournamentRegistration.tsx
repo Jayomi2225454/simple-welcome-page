@@ -7,9 +7,10 @@ import { useToast } from '@/hooks/use-toast';
 import { tournamentRegistrationService, TournamentRegistration, TournamentRoom } from '@/services/tournamentRegistrationService';
 import { supabase } from '@/integrations/supabase/client';
 import { Tournament } from '@/types';
-import { Users, Lock, CheckCircle, Clock, XCircle, AlertTriangle, RefreshCw, Copy, Check } from 'lucide-react';
+import { Users, Lock, CheckCircle, Clock, XCircle, AlertTriangle, RefreshCw, Copy, Check, Edit3 } from 'lucide-react';
 import RegistrationFormDialog from './RegistrationFormDialog';
 import PaymentRetryDialog from './PaymentRetryDialog';
+import EditRegistrationDialog from './EditRegistrationDialog';
 import TournamentTimer from './TournamentTimer';
 import TeamRegistration from './TeamRegistration';
 import { Link } from 'react-router-dom';
@@ -26,6 +27,7 @@ const TournamentRegistrationComponent: React.FC<TournamentRegistrationProps> = (
   const [userProfile, setUserProfile] = useState<any>(null);
   const [showRegistrationDialog, setShowRegistrationDialog] = useState(false);
   const [showPaymentRetryDialog, setShowPaymentRetryDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   
   const { user } = useAuth();
   const { toast } = useToast();
@@ -312,6 +314,18 @@ const TournamentRegistrationComponent: React.FC<TournamentRegistrationProps> = (
             {getRegistrationStatus()}
           </div>
 
+          {/* Edit Registration Details Button */}
+          {userRegistration && (
+            <Button
+              onClick={() => setShowEditDialog(true)}
+              variant="outline"
+              className="w-full border-purple-500/30 text-purple-300 hover:bg-purple-500/10 hover:text-purple-200"
+            >
+              <Edit3 className="w-4 h-4 mr-2" />
+              Edit Registration Details
+            </Button>
+          )}
+
           {/* Payment Pending Message */}
           {userRegistration?.payment_status === 'pending' && (
             <div className="p-4 bg-yellow-500/10 border border-yellow-400/30 rounded-lg">
@@ -480,6 +494,20 @@ const TournamentRegistrationComponent: React.FC<TournamentRegistrationProps> = (
         tournamentId={tournament.id}
         entryFee={entryFeeAmount}
       />
+
+      {/* Edit Registration Dialog */}
+      {userRegistration && (
+        <EditRegistrationDialog
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          registration={userRegistration}
+          tournamentId={tournament.id}
+          onUpdated={() => {
+            loadUserData();
+            loadRegistrations();
+          }}
+        />
+      )}
     </div>
   );
 };
