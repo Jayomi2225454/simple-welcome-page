@@ -1162,6 +1162,20 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         isPaid={!isFree}
         entryFee={isLeaderPays ? totalLeaderAmount : entryFeeAmount}
       />
+
+      {/* Edit Registration Dialog */}
+      {userRegistration && (
+        <EditRegistrationDialog
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          registration={userRegistration}
+          tournamentId={tournament.id}
+          onUpdated={() => {
+            loadUserData();
+            loadAvailableTeams();
+          }}
+        />
+      )}
     </div>
   );
 };
