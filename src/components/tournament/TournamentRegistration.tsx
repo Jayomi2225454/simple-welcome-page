@@ -314,6 +314,18 @@ const TournamentRegistrationComponent: React.FC<TournamentRegistrationProps> = (
             {getRegistrationStatus()}
           </div>
 
+          {/* Edit Registration Details Button */}
+          {userRegistration && (
+            <Button
+              onClick={() => setShowEditDialog(true)}
+              variant="outline"
+              className="w-full border-purple-500/30 text-purple-300 hover:bg-purple-500/10 hover:text-purple-200"
+            >
+              <Edit3 className="w-4 h-4 mr-2" />
+              Edit Registration Details
+            </Button>
+          )}
+
           {/* Payment Pending Message */}
           {userRegistration?.payment_status === 'pending' && (
             <div className="p-4 bg-yellow-500/10 border border-yellow-400/30 rounded-lg">
