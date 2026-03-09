@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Tournament } from '@/types';
-import { Users, Crown, UserPlus, Copy, CheckCircle, Clock, Lock, Hash, XCircle, AlertTriangle, RefreshCw, Trash2, Wallet } from 'lucide-react';
+import { Users, Crown, UserPlus, Copy, CheckCircle, Clock, Lock, Hash, XCircle, AlertTriangle, RefreshCw, Trash2, Wallet, Edit3 } from 'lucide-react';
 import { tournamentRegistrationService, TournamentRoom } from '@/services/tournamentRegistrationService';
 import RegistrationFormDialog from './RegistrationFormDialog';
 import PaymentRetryDialog from './PaymentRetryDialog';
