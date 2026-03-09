@@ -494,6 +494,20 @@ const TournamentRegistrationComponent: React.FC<TournamentRegistrationProps> = (
         tournamentId={tournament.id}
         entryFee={entryFeeAmount}
       />
+
+      {/* Edit Registration Dialog */}
+      {userRegistration && (
+        <EditRegistrationDialog
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          registration={userRegistration}
+          tournamentId={tournament.id}
+          onUpdated={() => {
+            loadUserData();
+            loadRegistrations();
+          }}
+        />
+      )}
     </div>
   );
 };
