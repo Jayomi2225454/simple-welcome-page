@@ -173,11 +173,48 @@ const PointsTableAdmin = () => {
     }
   };
 
-  const handleAddMatch = () => {
+  const handleAddMatch = async () => {
     const newMatchNum = totalMatches + 1;
+    
+    setLoading(true);
+    try {
+      // Always fetch teams from the database tournament_teams table
+      const { data: dbTeams, error: teamsError } = await supabase
+        .from('tournament_teams')
+        .select('id, team_name')
+        .eq('tournament_id', selectedTournament)
+        .order('team_name');
+
+      if (teamsError) throw teamsError;
+
+      if (dbTeams && dbTeams.length > 0) {
+        for (const team of dbTeams) {
+          await supabase.from('tournament_points').insert({
+            tournament_id: selectedTournament,
+            team_id: team.id,
+            team_name: team.team_name,
+            group_name: null,
+            points: 0,
+            kills: 0,
+            wins: 0,
+            position: 1,
+            position_in_group: null,
+            match_number: newMatchNum,
+          });
+        }
+        await loadPointsTable();
+        toast({ title: `Match ${newMatchNum} Created`, description: `Added ${dbTeams.length} registered teams with zero scores.` });
+      } else {
+        toast({ title: `Match ${newMatchNum} Created`, description: 'No registered teams found. You can add teams manually.' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+    
     setTotalMatches(newMatchNum);
     setSelectedMatch(newMatchNum);
-    toast({ title: `Match ${newMatchNum} Created`, description: 'You can now add points for this match.' });
   };
 
   const handleDeleteMatch = async (matchNum: number) => {
@@ -741,7 +778,7 @@ const PointsTableAdmin = () => {
 
       {/* Registered Teams & Player Points */}
       {selectedTournament && (
-        <PlayerPointsAdmin tournamentId={selectedTournament} />
+        <PlayerPointsAdmin tournamentId={selectedTournament} selectedMatch={selectedMatch} totalMatches={totalMatches} />
       )}
 
       {/* Add New Team */}
