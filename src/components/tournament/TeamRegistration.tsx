@@ -59,6 +59,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
   // Dialog states for registration flow
   const [showRegistrationDialog, setShowRegistrationDialog] = useState(false);
   const [showPaymentRetryDialog, setShowPaymentRetryDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [pendingTeamAction, setPendingTeamAction] = useState<{ type: 'create' | 'join' | 'join_by_code'; teamId?: string } | null>(null);
   
   const { user } = useAuth();
