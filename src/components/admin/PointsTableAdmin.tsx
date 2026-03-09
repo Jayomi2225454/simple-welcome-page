@@ -7,11 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Save, Edit, Users, Trophy, Shuffle, Upload, Camera, Loader2, Check, X, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Save, Edit, Users, Trophy, Shuffle, Upload, Camera, Loader2, Check, X, AlertCircle, Hash } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useGameStore } from '@/store/gameStore';
 import PlayerPointsAdmin from './PlayerPointsAdmin';
+
 interface PointEntry {
   id?: string;
   team_id: string;
@@ -22,6 +23,7 @@ interface PointEntry {
   wins: number;
   position: number;
   position_in_group: number | null;
+  match_number: number;
 }
 
 interface OCRMatchedTeam {
@@ -58,6 +60,10 @@ const PointsTableAdmin = () => {
   const tableDirtyRef = useRef(false);
   const pointsEntriesRef = useRef(pointsEntries);
 
+  // Match management
+  const [selectedMatch, setSelectedMatch] = useState<number>(1);
+  const [totalMatches, setTotalMatches] = useState<number>(1);
+
   // OCR states
   const [ocrDialogOpen, setOcrDialogOpen] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -77,6 +83,7 @@ const PointsTableAdmin = () => {
     wins: 0,
     position: 1,
     position_in_group: null,
+    match_number: 1,
   });
 
   // Load existing points when tournament is selected
@@ -95,6 +102,7 @@ const PointsTableAdmin = () => {
         .from('tournament_points')
         .select('*')
         .eq('tournament_id', selectedTournament)
+        .order('match_number', { ascending: true })
         .order('position', { ascending: true });
 
       if (error) throw error;
@@ -104,6 +112,11 @@ const PointsTableAdmin = () => {
       // Detect group mode from existing data
       const hasGroups = data?.some(entry => entry.group_name);
       setGroupMode(hasGroups ? 'multiple' : 'single');
+
+      // Detect max match number
+      const maxMatch = Math.max(...(data || []).map(e => e.match_number || 1), 1);
+      setTotalMatches(maxMatch);
+      if (selectedMatch > maxMatch) setSelectedMatch(maxMatch);
     } catch (error: any) {
       console.error('Error loading points:', error);
       toast({
@@ -116,8 +129,10 @@ const PointsTableAdmin = () => {
     }
   };
 
+  // Get entries for the selected match
+  const currentMatchEntries = pointsEntries.filter(e => (e.match_number || 1) === selectedMatch);
+
   const calculatePositions = (entries: PointEntry[]): PointEntry[] => {
-    // Sort by points descending
     const sorted = [...entries].sort((a, b) => b.points - a.points);
     
     if (groupMode === 'single') {
@@ -128,7 +143,6 @@ const PointsTableAdmin = () => {
         group_name: null,
       }));
     } else {
-      // Calculate positions within each group
       const groups = new Map<string, PointEntry[]>();
       sorted.forEach(entry => {
         const group = entry.group_name || 'A';
@@ -137,9 +151,6 @@ const PointsTableAdmin = () => {
       });
 
       const result: PointEntry[] = [];
-      let globalPosition = 1;
-      
-      // Sort groups and assign positions
       const allGrouped = Array.from(groups.entries())
         .sort(([a], [b]) => a.localeCompare(b))
         .flatMap(([groupName, groupEntries]) => {
@@ -152,7 +163,6 @@ const PointsTableAdmin = () => {
             }));
         });
 
-      // Assign global positions based on points
       allGrouped
         .sort((a, b) => b.points - a.points)
         .forEach((entry, idx) => {
@@ -161,6 +171,44 @@ const PointsTableAdmin = () => {
 
       return result;
     }
+  };
+
+  const handleAddMatch = () => {
+    const newMatchNum = totalMatches + 1;
+    setTotalMatches(newMatchNum);
+    setSelectedMatch(newMatchNum);
+    toast({ title: `Match ${newMatchNum} Created`, description: 'You can now add points for this match.' });
+  };
+
+  const handleDeleteMatch = async (matchNum: number) => {
+    if (totalMatches <= 1) return;
+    
+    const matchEntries = pointsEntries.filter(e => (e.match_number || 1) === matchNum);
+    if (matchEntries.length > 0) {
+      try {
+        for (const entry of matchEntries) {
+          if (entry.id) {
+            await supabase.from('tournament_points').delete().eq('id', entry.id);
+          }
+        }
+      } catch (err: any) {
+        toast({ title: 'Error', description: err.message, variant: 'destructive' });
+        return;
+      }
+    }
+
+    // Renumber matches above
+    const entriesToUpdate = pointsEntries.filter(e => (e.match_number || 1) > matchNum);
+    for (const entry of entriesToUpdate) {
+      if (entry.id) {
+        await supabase.from('tournament_points').update({ match_number: (entry.match_number || 1) - 1 }).eq('id', entry.id);
+      }
+    }
+
+    setTotalMatches(prev => prev - 1);
+    setSelectedMatch(prev => Math.min(prev, totalMatches - 1));
+    await loadPointsTable();
+    toast({ title: 'Match Deleted' });
   };
 
   const handleAddEntry = async () => {
@@ -181,6 +229,7 @@ const PointsTableAdmin = () => {
         tournament_id: selectedTournament,
         group_name: groupMode === 'multiple' ? (newEntry.group_name || 'A') : null,
         position_in_group: groupMode === 'multiple' ? 1 : null,
+        match_number: selectedMatch,
       };
 
       const { data, error } = await supabase
@@ -192,12 +241,13 @@ const PointsTableAdmin = () => {
       if (error) throw error;
 
       const updatedEntries = [...pointsEntries, data];
-      const recalculated = calculatePositions(updatedEntries);
+      const matchEntries = updatedEntries.filter(e => (e.match_number || 1) === selectedMatch);
+      const otherEntries = updatedEntries.filter(e => (e.match_number || 1) !== selectedMatch);
+      const recalculated = calculatePositions(matchEntries);
       
-      // Update all positions in database
       await updateAllPositions(recalculated);
       
-      setPointsEntries(recalculated);
+      setPointsEntries([...otherEntries, ...recalculated]);
       setNewEntry({
         team_id: '',
         team_name: '',
@@ -207,19 +257,13 @@ const PointsTableAdmin = () => {
         wins: 0,
         position: 1,
         position_in_group: null,
+        match_number: selectedMatch,
       });
 
-      toast({
-        title: "Success",
-        description: "Team added to points table",
-      });
+      toast({ title: "Success", description: "Team added to points table" });
     } catch (error: any) {
       console.error('Error adding entry:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add entry",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message || "Failed to add entry", variant: "destructive" });
     }
   };
 
@@ -251,22 +295,17 @@ const PointsTableAdmin = () => {
         e.id === entryId ? { ...e, ...updates } : e
       );
       
-      const recalculated = calculatePositions(updatedEntries);
+      const matchEntries = updatedEntries.filter(e => (e.match_number || 1) === selectedMatch);
+      const otherEntries = updatedEntries.filter(e => (e.match_number || 1) !== selectedMatch);
+      const recalculated = calculatePositions(matchEntries);
       await updateAllPositions(recalculated);
       
-      setPointsEntries(recalculated);
+      setPointsEntries([...otherEntries, ...recalculated]);
       setEditingEntry(null);
 
-      toast({
-        title: "Success",
-        description: "Entry updated",
-      });
+      toast({ title: "Success", description: "Entry updated" });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update entry",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message || "Failed to update entry", variant: "destructive" });
     }
   };
 
@@ -280,35 +319,26 @@ const PointsTableAdmin = () => {
       if (error) throw error;
 
       const remaining = pointsEntries.filter(e => e.id !== entryId);
-      const recalculated = calculatePositions(remaining);
+      const matchEntries = remaining.filter(e => (e.match_number || 1) === selectedMatch);
+      const otherEntries = remaining.filter(e => (e.match_number || 1) !== selectedMatch);
+      const recalculated = calculatePositions(matchEntries);
       await updateAllPositions(recalculated);
       
-      setPointsEntries(recalculated);
+      setPointsEntries([...otherEntries, ...recalculated]);
 
-      toast({
-        title: "Success",
-        description: "Entry deleted",
-      });
+      toast({ title: "Success", description: "Entry deleted" });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete entry",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message || "Failed to delete entry", variant: "destructive" });
     }
   };
 
   const handleDistributeTeams = () => {
-    if (pointsEntries.length === 0) {
-      toast({
-        title: "No Teams",
-        description: "Add teams first before distributing",
-        variant: "destructive",
-      });
+    if (currentMatchEntries.length === 0) {
+      toast({ title: "No Teams", description: "Add teams first before distributing", variant: "destructive" });
       return;
     }
 
-    const shuffled = [...pointsEntries].sort(() => Math.random() - 0.5);
+    const shuffled = [...currentMatchEntries].sort(() => Math.random() - 0.5);
     const groups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].slice(0, numberOfGroups);
     
     const distributed = shuffled.map((entry, index) => ({
@@ -317,12 +347,10 @@ const PointsTableAdmin = () => {
     }));
 
     const recalculated = calculatePositions(distributed);
-    setPointsEntries(recalculated);
+    const otherEntries = pointsEntries.filter(e => (e.match_number || 1) !== selectedMatch);
+    setPointsEntries([...otherEntries, ...recalculated]);
 
-    toast({
-      title: "Teams Distributed",
-      description: `Teams distributed equally across ${numberOfGroups} groups`,
-    });
+    toast({ title: "Teams Distributed", description: `Teams distributed across ${numberOfGroups} groups` });
   };
 
   // Keep ref in sync
@@ -332,7 +360,7 @@ const PointsTableAdmin = () => {
 
   const autoSaveTable = useCallback(async () => {
     if (!tableDirtyRef.current) return;
-    const entries = pointsEntriesRef.current;
+    const entries = pointsEntriesRef.current.filter(e => (e.match_number || 1) === selectedMatch);
     setTableSaveStatus('saving');
     try {
       for (const entry of entries) {
@@ -356,13 +384,9 @@ const PointsTableAdmin = () => {
       setTimeout(() => setTableSaveStatus('idle'), 2000);
     } catch (error: any) {
       setTableSaveStatus('idle');
-      toast({
-        title: "Auto-save failed",
-        description: error.message || "Failed to save changes",
-        variant: "destructive",
-      });
+      toast({ title: "Auto-save failed", description: error.message || "Failed to save changes", variant: "destructive" });
     }
-  }, [toast]);
+  }, [toast, selectedMatch]);
 
   const triggerTableAutoSave = useCallback(() => {
     tableDirtyRef.current = true;
@@ -382,47 +406,37 @@ const PointsTableAdmin = () => {
   const handleInlineEdit = (entryId: string, field: keyof PointEntry, value: string | number) => {
     setPointsEntries(prev => {
       const updated = prev.map(p => p.id === entryId ? { ...p, [field]: value } : p);
-      return calculatePositions(updated);
+      const matchEntries = updated.filter(e => (e.match_number || 1) === selectedMatch);
+      const otherEntries = updated.filter(e => (e.match_number || 1) !== selectedMatch);
+      return [...otherEntries, ...calculatePositions(matchEntries)];
     });
     triggerTableAutoSave();
   };
 
-  // Get unique groups from entries
-  const uniqueGroups = [...new Set(pointsEntries.map(e => e.group_name).filter(Boolean))].sort();
+  // Get unique groups from current match entries
+  const uniqueGroups = [...new Set(currentMatchEntries.map(e => e.group_name).filter(Boolean))].sort();
 
   // OCR Functions
   const handleOCRFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid File",
-        description: "Please select an image file",
-        variant: "destructive",
-      });
+      toast({ title: "Invalid File", description: "Please select an image file", variant: "destructive" });
       return;
     }
 
-    // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      toast({
-        title: "File Too Large",
-        description: "Please select an image under 10MB",
-        variant: "destructive",
-      });
+      toast({ title: "File Too Large", description: "Please select an image under 10MB", variant: "destructive" });
       return;
     }
 
-    // Create preview
     const reader = new FileReader();
     reader.onload = (event) => {
       setOcrImagePreview(event.target?.result as string);
     };
     reader.readAsDataURL(file);
 
-    // Convert to base64 and process
     await processOCRImage(file);
   };
 
@@ -433,12 +447,10 @@ const PointsTableAdmin = () => {
     setOcrUnmatchedPlayers([]);
 
     try {
-      // Convert file to base64
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
           const result = reader.result as string;
-          // Remove data URL prefix
           const base64Data = result.split(',')[1];
           resolve(base64Data);
         };
@@ -446,7 +458,6 @@ const PointsTableAdmin = () => {
         reader.readAsDataURL(file);
       });
 
-      // Call the OCR edge function
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-points-extract`,
         {
@@ -469,11 +480,8 @@ const PointsTableAdmin = () => {
 
       const data = await response.json();
       
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      if (data.error) throw new Error(data.error);
 
-      // Set matched teams with selection state
       setOcrMatchedTeams(
         (data.matchedTeams || []).map((team: OCRMatchedTeam) => ({
           ...team,
@@ -483,23 +491,19 @@ const PointsTableAdmin = () => {
       setOcrUnmatchedPlayers(data.unmatchedPlayers || []);
 
       if (data.matchedTeams?.length === 0 && data.unmatchedPlayers?.length === 0) {
-        setOcrError('No player data could be extracted from the image. Please try a clearer screenshot.');
+        setOcrError('No player data could be extracted from the image.');
       } else {
         setOcrDialogOpen(true);
       }
 
       toast({
         title: "OCR Complete",
-        description: `Found ${data.matchedTeams?.length || 0} matched teams, ${data.unmatchedPlayers?.length || 0} unmatched players`,
+        description: `Found ${data.matchedTeams?.length || 0} matched, ${data.unmatchedPlayers?.length || 0} unmatched`,
       });
     } catch (error: any) {
       console.error('OCR error:', error);
       setOcrError(error.message || 'Failed to process image');
-      toast({
-        title: "OCR Failed",
-        description: error.message || "Failed to extract data from image",
-        variant: "destructive",
-      });
+      toast({ title: "OCR Failed", description: error.message || "Failed to extract data", variant: "destructive" });
     } finally {
       setOcrLoading(false);
     }
@@ -517,59 +521,69 @@ const PointsTableAdmin = () => {
     const selectedTeams = ocrMatchedTeams.filter(t => t.selected);
     
     if (selectedTeams.length === 0) {
-      toast({
-        title: "No Teams Selected",
-        description: "Please select at least one team to update",
-        variant: "destructive",
-      });
+      toast({ title: "No Teams Selected", description: "Please select at least one team to update", variant: "destructive" });
       return;
     }
 
     setLoading(true);
     try {
       for (const team of selectedTeams) {
-        // Find the existing entry and update it
-        const existingEntry = pointsEntries.find(e => e.id === team.teamId);
+        const existingEntry = currentMatchEntries.find(e => e.id === team.teamId);
         
         if (existingEntry) {
-          // Add the OCR points/kills to existing values
           const newPoints = existingEntry.points + team.points;
           const newKills = existingEntry.kills + team.kills;
           
           await supabase
             .from('tournament_points')
-            .update({
-              points: newPoints,
-              kills: newKills,
-            })
+            .update({ points: newPoints, kills: newKills })
             .eq('id', team.teamId);
         }
       }
 
-      // Reload the points table
       await loadPointsTable();
+      toast({ title: "Points Updated", description: `Updated points for ${selectedTeams.length} teams` });
 
-      toast({
-        title: "Points Updated",
-        description: `Updated points for ${selectedTeams.length} teams`,
-      });
-
-      // Close dialog and reset state
       setOcrDialogOpen(false);
       setOcrImagePreview(null);
       setOcrMatchedTeams([]);
       setOcrUnmatchedPlayers([]);
-      
-      // Reset file input
-      if (ocrFileInputRef.current) {
-        ocrFileInputRef.current.value = '';
-      }
+      if (ocrFileInputRef.current) ocrFileInputRef.current.value = '';
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update points",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message || "Failed to update points", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Copy teams from another match
+  const handleCopyTeamsFromMatch = async (sourceMatch: number) => {
+    const sourceEntries = pointsEntries.filter(e => (e.match_number || 1) === sourceMatch);
+    if (sourceEntries.length === 0) {
+      toast({ title: 'No Teams', description: `Match ${sourceMatch} has no teams to copy`, variant: 'destructive' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      for (const entry of sourceEntries) {
+        await supabase.from('tournament_points').insert({
+          tournament_id: selectedTournament,
+          team_id: entry.team_id,
+          team_name: entry.team_name,
+          group_name: entry.group_name,
+          points: 0,
+          kills: 0,
+          wins: 0,
+          position: entry.position,
+          position_in_group: entry.position_in_group,
+          match_number: selectedMatch,
+        });
+      }
+      await loadPointsTable();
+      toast({ title: 'Teams Copied', description: `Copied ${sourceEntries.length} teams from Match ${sourceMatch} with zero scores` });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -645,6 +659,86 @@ const PointsTableAdmin = () => {
         </CardContent>
       </Card>
 
+      {/* Match Selector */}
+      {selectedTournament && (
+        <Card className="bg-gradient-to-r from-blue-900/40 to-purple-900/40 border-blue-500/30">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-white flex items-center gap-2 text-lg">
+              <Hash className="w-5 h-5" />
+              Match Management
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2 items-center">
+              {Array.from({ length: totalMatches }, (_, i) => i + 1).map(matchNum => {
+                const matchEntryCount = pointsEntries.filter(e => (e.match_number || 1) === matchNum).length;
+                return (
+                  <Button
+                    key={matchNum}
+                    variant={selectedMatch === matchNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedMatch(matchNum)}
+                    className={selectedMatch === matchNum
+                      ? "bg-primary hover:bg-primary/90"
+                      : "border-gray-600 text-gray-300 hover:bg-gray-700"
+                    }
+                  >
+                    Match {matchNum}
+                    {matchEntryCount > 0 && (
+                      <Badge className="ml-1.5 bg-white/20 text-white text-[10px] px-1.5 py-0">{matchEntryCount}</Badge>
+                    )}
+                  </Button>
+                );
+              })}
+              <Button
+                size="sm"
+                onClick={handleAddMatch}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Add Match
+              </Button>
+            </div>
+
+            {totalMatches > 1 && (
+              <div className="flex flex-wrap gap-2 items-center">
+                {currentMatchEntries.length === 0 && totalMatches > 1 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-400">Copy teams from:</span>
+                    {Array.from({ length: totalMatches }, (_, i) => i + 1)
+                      .filter(m => m !== selectedMatch && pointsEntries.filter(e => (e.match_number || 1) === m).length > 0)
+                      .map(m => (
+                        <Button key={m} size="sm" variant="outline" className="border-gray-600 text-gray-300 hover:bg-gray-700" onClick={() => handleCopyTeamsFromMatch(m)}>
+                          Match {m}
+                        </Button>
+                      ))
+                    }
+                  </div>
+                )}
+                {totalMatches > 1 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDeleteMatch(selectedMatch)}
+                    className="ml-auto border-red-500/50 text-red-400 hover:bg-red-500/10"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    Delete Match {selectedMatch}
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Aggregate summary */}
+            {totalMatches > 1 && (
+              <div className="bg-gray-800/60 rounded-lg p-3 border border-gray-700/50">
+                <p className="text-xs text-gray-400 mb-2">📊 Users will see aggregated totals across all {totalMatches} matches automatically.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Registered Teams & Player Points */}
       {selectedTournament && (
         <PlayerPointsAdmin tournamentId={selectedTournament} />
@@ -656,7 +750,7 @@ const PointsTableAdmin = () => {
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <Plus className="w-5 h-5" />
-              Add Team
+              Add Team to Match {selectedMatch}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -725,12 +819,12 @@ const PointsTableAdmin = () => {
       )}
 
       {/* OCR Screenshot Upload */}
-      {selectedTournament && pointsEntries.length > 0 && (
+      {selectedTournament && currentMatchEntries.length > 0 && (
         <Card className="bg-gradient-to-r from-purple-900/50 to-blue-900/50 border-purple-500/30">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <Camera className="w-5 h-5" />
-              Auto-Add Points from Screenshot (OCR)
+              Auto-Add Points from Screenshot (OCR) - Match {selectedMatch}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -755,30 +849,17 @@ const PointsTableAdmin = () => {
                   className="bg-purple-500 hover:bg-purple-600"
                 >
                   {ocrLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Processing...
-                    </>
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing...</>
                   ) : (
-                    <>
-                      <Upload className="w-4 h-4 mr-2" />
-                      Upload Screenshot
-                    </>
+                    <><Upload className="w-4 h-4 mr-2" />Upload Screenshot</>
                   )}
                 </Button>
                 
                 {ocrImagePreview && !ocrLoading && (
                   <div className="relative">
-                    <img 
-                      src={ocrImagePreview} 
-                      alt="OCR Preview" 
-                      className="h-16 w-auto rounded border border-gray-600"
-                    />
+                    <img src={ocrImagePreview} alt="OCR Preview" className="h-16 w-auto rounded border border-gray-600" />
                     <button
-                      onClick={() => {
-                        setOcrImagePreview(null);
-                        if (ocrFileInputRef.current) ocrFileInputRef.current.value = '';
-                      }}
+                      onClick={() => { setOcrImagePreview(null); if (ocrFileInputRef.current) ocrFileInputRef.current.value = ''; }}
                       className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1"
                     >
                       <X className="w-3 h-3 text-white" />
@@ -789,8 +870,7 @@ const PointsTableAdmin = () => {
 
               {ocrError && (
                 <div className="flex items-center gap-2 text-red-400 text-sm">
-                  <AlertCircle className="w-4 h-4" />
-                  {ocrError}
+                  <AlertCircle className="w-4 h-4" />{ocrError}
                 </div>
               )}
             </div>
@@ -798,13 +878,13 @@ const PointsTableAdmin = () => {
         </Card>
       )}
 
-      {/* Points Table */}
-      {selectedTournament && pointsEntries.length > 0 && (
+      {/* Points Table for Current Match */}
+      {selectedTournament && currentMatchEntries.length > 0 && (
         <Card className="bg-gray-800 border-gray-700">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-white flex items-center gap-2">
               <Users className="w-5 h-5" />
-              Points Table ({pointsEntries.length} Teams)
+              Match {selectedMatch} Points ({currentMatchEntries.length} Teams)
             </CardTitle>
             <div className="flex items-center gap-2">
               {tableSaveStatus === 'saving' && (
@@ -821,10 +901,9 @@ const PointsTableAdmin = () => {
           </CardHeader>
           <CardContent>
             {groupMode === 'multiple' && uniqueGroups.length > 0 ? (
-              // Multiple groups - show separate tables
               <div className="space-y-6">
                 {uniqueGroups.map(group => (
-                  <div key={group} className="space-y-2">
+                  <div key={group as string} className="space-y-2">
                     <h3 className="text-lg font-semibold text-purple-400">Group {group}</h3>
                     <Table>
                       <TableHeader>
@@ -838,60 +917,32 @@ const PointsTableAdmin = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {pointsEntries
+                        {currentMatchEntries
                           .filter(e => e.group_name === group)
                           .sort((a, b) => (a.position_in_group || 0) - (b.position_in_group || 0))
                           .map((entry) => (
                             <TableRow key={entry.id} className="border-gray-700">
                               <TableCell className="text-white font-bold">{entry.position_in_group}</TableCell>
                               <TableCell>
-                                <Input
-                                  value={entry.team_name}
-                                  onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)}
-                                  className="bg-gray-700 border-gray-600 text-white"
-                                />
+                                <Input value={entry.team_name} onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)} className="bg-gray-700 border-gray-600 text-white" />
                               </TableCell>
                               <TableCell>
-                                <Input
-                                  type="number"
-                                  value={entry.points}
-                                  onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)}
-                                  className="bg-gray-700 border-gray-600 text-white w-20"
-                                />
+                                <Input type="number" value={entry.points} onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)} className="bg-gray-700 border-gray-600 text-white w-20" />
                               </TableCell>
                               <TableCell>
-                                <Input
-                                  type="number"
-                                  value={entry.kills}
-                                  onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)}
-                                  className="bg-gray-700 border-gray-600 text-white w-20"
-                                />
+                                <Input type="number" value={entry.kills} onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)} className="bg-gray-700 border-gray-600 text-white w-20" />
                               </TableCell>
                               <TableCell>
-                                <Input
-                                  type="number"
-                                  value={entry.wins}
-                                  onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)}
-                                  className="bg-gray-700 border-gray-600 text-white w-20"
-                                />
+                                <Input type="number" value={entry.wins} onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)} className="bg-gray-700 border-gray-600 text-white w-20" />
                               </TableCell>
                               <TableCell>
                                 <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleDeleteEntry(entry.id!)}
-                                    className="bg-red-500 hover:bg-red-600"
-                                  >
+                                  <Button size="sm" onClick={() => handleDeleteEntry(entry.id!)} className="bg-red-500 hover:bg-red-600">
                                     <Trash2 className="w-4 h-4" />
                                   </Button>
                                   {groupMode === 'multiple' && (
-                                    <Select
-                                      value={entry.group_name || 'A'}
-                                      onValueChange={(v) => handleInlineEdit(entry.id!, 'group_name', v)}
-                                    >
-                                      <SelectTrigger className="bg-gray-700 border-gray-600 text-white w-24">
-                                        <SelectValue />
-                                      </SelectTrigger>
+                                    <Select value={entry.group_name || 'A'} onValueChange={(v) => handleInlineEdit(entry.id!, 'group_name', v)}>
+                                      <SelectTrigger className="bg-gray-700 border-gray-600 text-white w-24"><SelectValue /></SelectTrigger>
                                       <SelectContent className="bg-gray-700 border-gray-600">
                                         {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].slice(0, numberOfGroups).map(g => (
                                           <SelectItem key={g} value={g}>Group {g}</SelectItem>
@@ -909,7 +960,6 @@ const PointsTableAdmin = () => {
                 ))}
               </div>
             ) : (
-              // Single group - show one table
               <Table>
                 <TableHeader>
                   <TableRow className="border-gray-700">
@@ -922,48 +972,25 @@ const PointsTableAdmin = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pointsEntries
+                  {currentMatchEntries
                     .sort((a, b) => a.position - b.position)
                     .map((entry) => (
                       <TableRow key={entry.id} className="border-gray-700">
                         <TableCell className="text-white font-bold">#{entry.position}</TableCell>
                         <TableCell>
-                          <Input
-                            value={entry.team_name}
-                            onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)}
-                            className="bg-gray-700 border-gray-600 text-white"
-                          />
+                          <Input value={entry.team_name} onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)} className="bg-gray-700 border-gray-600 text-white" />
                         </TableCell>
                         <TableCell>
-                          <Input
-                            type="number"
-                            value={entry.points}
-                            onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)}
-                            className="bg-gray-700 border-gray-600 text-white w-20"
-                          />
+                          <Input type="number" value={entry.points} onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)} className="bg-gray-700 border-gray-600 text-white w-20" />
                         </TableCell>
                         <TableCell>
-                          <Input
-                            type="number"
-                            value={entry.kills}
-                            onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)}
-                            className="bg-gray-700 border-gray-600 text-white w-20"
-                          />
+                          <Input type="number" value={entry.kills} onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)} className="bg-gray-700 border-gray-600 text-white w-20" />
                         </TableCell>
                         <TableCell>
-                          <Input
-                            type="number"
-                            value={entry.wins}
-                            onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)}
-                            className="bg-gray-700 border-gray-600 text-white w-20"
-                          />
+                          <Input type="number" value={entry.wins} onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)} className="bg-gray-700 border-gray-600 text-white w-20" />
                         </TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            onClick={() => handleDeleteEntry(entry.id!)}
-                            className="bg-red-500 hover:bg-red-600"
-                          >
+                          <Button size="sm" onClick={() => handleDeleteEntry(entry.id!)} className="bg-red-500 hover:bg-red-600">
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </TableCell>
@@ -976,11 +1003,11 @@ const PointsTableAdmin = () => {
         </Card>
       )}
 
-      {selectedTournament && pointsEntries.length === 0 && !loading && (
+      {selectedTournament && currentMatchEntries.length === 0 && !loading && (
         <Card className="bg-gray-800 border-gray-700">
           <CardContent className="py-8 text-center">
             <Users className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-            <p className="text-gray-400">No teams in points table yet. Add teams above.</p>
+            <p className="text-gray-400">No teams in Match {selectedMatch} yet. Add teams above or copy from another match.</p>
           </CardContent>
         </Card>
       )}
@@ -991,21 +1018,18 @@ const PointsTableAdmin = () => {
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               <Camera className="w-5 h-5" />
-              OCR Results - Match Players to Teams
+              OCR Results - Match {selectedMatch}
             </DialogTitle>
           </DialogHeader>
           
           <div className="space-y-6">
-            {/* Matched Teams */}
             {ocrMatchedTeams.length > 0 && (
               <div className="space-y-3">
                 <h3 className="text-green-400 font-semibold flex items-center gap-2">
                   <Check className="w-4 h-4" />
                   Matched Teams ({ocrMatchedTeams.length})
                 </h3>
-                <p className="text-gray-400 text-sm">
-                  Select which teams should have their points updated. Points and kills will be added to existing values.
-                </p>
+                <p className="text-gray-400 text-sm">Points and kills will be added to existing values for Match {selectedMatch}.</p>
                 <Table>
                   <TableHeader>
                     <TableRow className="border-gray-700">
@@ -1020,21 +1044,13 @@ const PointsTableAdmin = () => {
                   <TableBody>
                     {ocrMatchedTeams.map((team) => (
                       <TableRow key={team.teamId} className="border-gray-700">
-                        <TableCell>
-                          <Checkbox
-                            checked={team.selected}
-                            onCheckedChange={() => toggleOCRTeamSelection(team.teamId)}
-                          />
-                        </TableCell>
+                        <TableCell><Checkbox checked={team.selected} onCheckedChange={() => toggleOCRTeamSelection(team.teamId)} /></TableCell>
                         <TableCell className="text-white font-medium">{team.teamName}</TableCell>
                         <TableCell className="text-gray-300">{team.playerName}</TableCell>
                         <TableCell className="text-green-400 font-semibold">+{team.points}</TableCell>
                         <TableCell className="text-red-400">+{team.kills}</TableCell>
                         <TableCell>
-                          <Badge 
-                            variant={team.confidence >= 0.8 ? "default" : "secondary"}
-                            className={team.confidence >= 0.8 ? "bg-green-500" : "bg-yellow-500"}
-                          >
+                          <Badge variant={team.confidence >= 0.8 ? "default" : "secondary"} className={team.confidence >= 0.8 ? "bg-green-500" : "bg-yellow-500"}>
                             {Math.round(team.confidence * 100)}%
                           </Badge>
                         </TableCell>
@@ -1045,16 +1061,12 @@ const PointsTableAdmin = () => {
               </div>
             )}
 
-            {/* Unmatched Players */}
             {ocrUnmatchedPlayers.length > 0 && (
               <div className="space-y-3">
                 <h3 className="text-yellow-400 font-semibold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" />
                   Unmatched Players ({ocrUnmatchedPlayers.length})
                 </h3>
-                <p className="text-gray-400 text-sm">
-                  These players couldn't be matched to any existing team. You may need to add them manually.
-                </p>
                 <div className="bg-gray-700/50 rounded-lg p-4 space-y-2">
                   {ocrUnmatchedPlayers.map((player, index) => (
                     <div key={index} className="flex items-center justify-between text-sm">
@@ -1068,39 +1080,13 @@ const PointsTableAdmin = () => {
                 </div>
               </div>
             )}
-
-            {ocrMatchedTeams.length === 0 && ocrUnmatchedPlayers.length === 0 && (
-              <div className="text-center py-8 text-gray-400">
-                <AlertCircle className="w-12 h-12 mx-auto mb-4" />
-                <p>No data could be extracted from the image.</p>
-              </div>
-            )}
           </div>
 
           <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setOcrDialogOpen(false)}
-              className="border-gray-600 text-gray-300"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={applyOCRPoints}
-              disabled={loading || ocrMatchedTeams.filter(t => t.selected).length === 0}
-              className="bg-green-500 hover:bg-green-600"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Applying...
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4 mr-2" />
-                  Apply Points ({ocrMatchedTeams.filter(t => t.selected).length} teams)
-                </>
-              )}
+            <Button variant="outline" onClick={() => setOcrDialogOpen(false)} className="border-gray-600 text-gray-300">Cancel</Button>
+            <Button onClick={applyOCRPoints} disabled={loading} className="bg-green-500 hover:bg-green-600">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
+              Apply Points
             </Button>
           </DialogFooter>
         </DialogContent>

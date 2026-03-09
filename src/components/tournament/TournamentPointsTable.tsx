@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trophy, Target, Users, Search, Filter, Image, Crown, Flame, Swords, Medal, ChevronDown, ChevronUp, User } from 'lucide-react';
+import { Trophy, Target, Users, Search, Filter, Image, Crown, Flame, Swords, Medal, ChevronDown, ChevronUp, User, Hash } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import html2canvas from 'html2canvas';
@@ -19,6 +19,19 @@ interface PointEntry {
   wins: number;
   position: number;
   position_in_group: number | null;
+  match_number: number;
+}
+
+interface AggregatedEntry {
+  team_id: string;
+  team_name: string;
+  group_name: string | null;
+  points: number;
+  kills: number;
+  wins: number;
+  position: number;
+  position_in_group: number | null;
+  matchBreakdown: { match_number: number; points: number; kills: number; wins: number }[];
 }
 
 interface PlayerPoint {
@@ -36,7 +49,7 @@ interface TournamentPointsTableProps {
 }
 
 // Top 3 Podium
-const TopThreePodium = ({ entries }: { entries: PointEntry[] }) => {
+const TopThreePodium = ({ entries }: { entries: AggregatedEntry[] }) => {
   const top3 = entries.slice(0, 3);
   if (top3.length === 0) return null;
 
@@ -54,7 +67,7 @@ const TopThreePodium = ({ entries }: { entries: PointEntry[] }) => {
         const actualPos = entry.position;
         const isFirst = actualPos === 1;
         return (
-          <div key={entry.id} className="flex flex-col items-center">
+          <div key={entry.team_id} className="flex flex-col items-center">
             <div className={`relative ${sizes[idx]} rounded-full bg-gradient-to-br ${podiumColors[idx]} p-[2px] mb-2 shadow-lg ${isFirst ? 'ring-2 ring-yellow-400/40 ring-offset-2 ring-offset-gray-900' : ''}`}>
               <div className="w-full h-full rounded-full bg-gray-800 flex items-center justify-center">
                 {isFirst ? <Crown className="w-5 h-5 text-yellow-400" /> : <Medal className="w-4 h-4 text-white" />}
@@ -81,12 +94,13 @@ const TopThreePodium = ({ entries }: { entries: PointEntry[] }) => {
 };
 
 const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => {
-  const [pointsEntries, setPointsEntries] = useState<PointEntry[]>([]);
+  const [rawEntries, setRawEntries] = useState<PointEntry[]>([]);
   const [playerPoints, setPlayerPoints] = useState<PlayerPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [displayMode, setDisplayMode] = useState<'single' | 'grouped'>('single');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'total' | number>('total');
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
@@ -94,12 +108,12 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
   const loadPointsTable = async () => {
     try {
       const [teamsRes, playersRes] = await Promise.all([
-        supabase.from('tournament_points').select('*').eq('tournament_id', tournamentId).order('position', { ascending: true }),
+        supabase.from('tournament_points').select('*').eq('tournament_id', tournamentId).order('match_number', { ascending: true }).order('position', { ascending: true }),
         supabase.from('tournament_player_points').select('*').eq('tournament_id', tournamentId).order('kills', { ascending: false }),
       ]);
 
       if (teamsRes.error) throw teamsRes.error;
-      setPointsEntries(teamsRes.data || []);
+      setRawEntries(teamsRes.data || []);
       setPlayerPoints(playersRes.data || []);
       const hasGroups = teamsRes.data?.some(entry => entry.group_name);
       setDisplayMode(hasGroups ? 'grouped' : 'single');
@@ -119,6 +133,76 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [tournamentId]);
+
+  // Determine unique match numbers
+  const matchNumbers = useMemo(() => {
+    const nums = [...new Set(rawEntries.map(e => e.match_number || 1))].sort((a, b) => a - b);
+    return nums;
+  }, [rawEntries]);
+
+  const hasMultipleMatches = matchNumbers.length > 1;
+
+  // Aggregate entries across matches or show single match
+  const pointsEntries: AggregatedEntry[] = useMemo(() => {
+    if (viewMode === 'total') {
+      // Aggregate by team_id
+      const teamMap = new Map<string, AggregatedEntry>();
+      for (const entry of rawEntries) {
+        const key = entry.team_id;
+        if (!teamMap.has(key)) {
+          teamMap.set(key, {
+            team_id: entry.team_id,
+            team_name: entry.team_name,
+            group_name: entry.group_name,
+            points: 0,
+            kills: 0,
+            wins: 0,
+            position: 0,
+            position_in_group: null,
+            matchBreakdown: [],
+          });
+        }
+        const agg = teamMap.get(key)!;
+        agg.points += entry.points;
+        agg.kills += entry.kills;
+        agg.wins += entry.wins;
+        agg.matchBreakdown.push({
+          match_number: entry.match_number || 1,
+          points: entry.points,
+          kills: entry.kills,
+          wins: entry.wins,
+        });
+      }
+      // Sort and assign positions
+      const sorted = Array.from(teamMap.values()).sort((a, b) => b.points - a.points);
+      sorted.forEach((entry, idx) => { entry.position = idx + 1; });
+      
+      // Assign group positions if grouped
+      if (displayMode === 'grouped') {
+        const groups = new Map<string, AggregatedEntry[]>();
+        sorted.forEach(e => {
+          const g = e.group_name || 'A';
+          if (!groups.has(g)) groups.set(g, []);
+          groups.get(g)!.push(e);
+        });
+        groups.forEach((entries) => {
+          entries.sort((a, b) => b.points - a.points).forEach((e, idx) => {
+            e.position_in_group = idx + 1;
+          });
+        });
+      }
+      return sorted;
+    } else {
+      // Show single match
+      const matchEntries = rawEntries.filter(e => (e.match_number || 1) === viewMode);
+      return matchEntries
+        .sort((a, b) => a.position - b.position)
+        .map(e => ({
+          ...e,
+          matchBreakdown: [{ match_number: e.match_number || 1, points: e.points, kills: e.kills, wins: e.wins }],
+        }));
+    }
+  }, [rawEntries, viewMode, displayMode]);
 
   const toggleTeam = (teamId: string) => {
     setExpandedTeams(prev => {
@@ -168,7 +252,7 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
     );
   }
 
-  if (pointsEntries.length === 0) {
+  if (rawEntries.length === 0) {
     return (
       <Card className="bg-gray-800/50 border-gray-700">
         <CardContent className="py-12 text-center">
@@ -182,18 +266,19 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
 
   const getTeamPlayers = (teamId: string) => playerPoints.filter(p => p.team_id === teamId);
 
-  const renderStandingsRow = (entry: PointEntry, idx: number) => {
+  const renderStandingsRow = (entry: AggregatedEntry, idx: number) => {
     const barWidth = (entry.points / maxPoints) * 100;
-    const isExpanded = expandedTeams.has(entry.id);
+    const isExpanded = expandedTeams.has(entry.team_id);
     const teamPlayers = getTeamPlayers(entry.team_id);
     const hasPlayers = teamPlayers.length > 0;
+    const showMatchBreakdown = hasMultipleMatches && viewMode === 'total' && entry.matchBreakdown.length > 1;
 
     return (
-      <div key={entry.id} className="animate-fade-in" style={{ animationDelay: `${idx * 30}ms` }}>
+      <div key={entry.team_id + '-' + viewMode} className="animate-fade-in" style={{ animationDelay: `${idx * 30}ms` }}>
         {/* Main Row */}
         <div
-          onClick={() => hasPlayers && toggleTeam(entry.id)}
-          className={`grid grid-cols-[36px_1fr_repeat(3,56px)_24px] sm:grid-cols-[44px_1fr_repeat(3,72px)_28px] items-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 rounded-xl transition-all duration-200 ${hasPlayers ? 'cursor-pointer' : ''} ${
+          onClick={() => (hasPlayers || showMatchBreakdown) && toggleTeam(entry.team_id)}
+          className={`grid grid-cols-[36px_1fr_repeat(3,56px)_24px] sm:grid-cols-[44px_1fr_repeat(3,72px)_28px] items-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 rounded-xl transition-all duration-200 ${(hasPlayers || showMatchBreakdown) ? 'cursor-pointer' : ''} ${
             entry.position === 1 ? 'bg-gradient-to-r from-yellow-500/15 to-transparent border border-yellow-500/20' :
             entry.position === 2 ? 'bg-gradient-to-r from-gray-400/10 to-transparent border border-gray-400/15' :
             entry.position === 3 ? 'bg-gradient-to-r from-amber-600/10 to-transparent border border-amber-600/15' :
@@ -223,7 +308,9 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
           <div className="min-w-0 pl-1 sm:pl-2">
             <p className="text-white font-semibold text-xs sm:text-sm truncate">{entry.team_name}</p>
             {entry.group_name && <p className="text-purple-400 text-[10px]">Group {entry.group_name}</p>}
-            {/* Progress bar */}
+            {hasMultipleMatches && viewMode === 'total' && (
+              <p className="text-gray-500 text-[10px]">{entry.matchBreakdown.length} matches</p>
+            )}
             <div className="mt-1 h-1 bg-gray-700/50 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-700 ${
@@ -269,53 +356,95 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
 
           {/* Expand Icon */}
           <div className="flex items-center justify-center">
-            {hasPlayers ? (
+            {(hasPlayers || showMatchBreakdown) ? (
               isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />
             ) : <div className="w-4" />}
           </div>
         </div>
 
-        {/* Expanded Players */}
-        {isExpanded && hasPlayers && (
+        {/* Expanded: Match Breakdown + Players */}
+        {isExpanded && (
           <div className="ml-4 sm:ml-10 mr-2 mt-1 mb-2 border-l-2 border-purple-500/30 pl-3 sm:pl-4 space-y-1 animate-fade-in">
-            {/* Player header */}
-            <div className="grid grid-cols-[1fr_repeat(3,56px)] sm:grid-cols-[1fr_repeat(3,72px)] items-center gap-1 sm:gap-2 px-2 py-1">
-              <span className="text-gray-500 text-[10px] sm:text-xs uppercase font-medium">Player</span>
-              <span className="text-gray-500 text-[10px] sm:text-xs uppercase font-medium text-center">Kills</span>
-              <span className="text-gray-500 text-[10px] sm:text-xs uppercase font-medium text-center">Wins</span>
-              <span className="text-gray-500 text-[10px] sm:text-xs uppercase font-medium text-center">Pts</span>
-            </div>
-            {teamPlayers.map(player => (
-              <div
-                key={player.id}
-                className="grid grid-cols-[1fr_repeat(3,56px)] sm:grid-cols-[1fr_repeat(3,72px)] items-center gap-1 sm:gap-2 px-2 py-2 rounded-lg bg-gray-800/40 hover:bg-gray-700/40 transition-colors"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-6 h-6 rounded-full bg-purple-600/30 flex items-center justify-center flex-shrink-0">
-                    <User className="w-3 h-3 text-purple-400" />
+            {/* Match Breakdown */}
+            {showMatchBreakdown && (
+              <>
+                <div className="grid grid-cols-[1fr_repeat(3,56px)] sm:grid-cols-[1fr_repeat(3,72px)] items-center gap-1 sm:gap-2 px-2 py-1">
+                  <span className="text-gray-500 text-[10px] sm:text-xs uppercase font-medium">Match</span>
+                  <span className="text-gray-500 text-[10px] sm:text-xs uppercase font-medium text-center">Kills</span>
+                  <span className="text-gray-500 text-[10px] sm:text-xs uppercase font-medium text-center">Wins</span>
+                  <span className="text-gray-500 text-[10px] sm:text-xs uppercase font-medium text-center">Pts</span>
+                </div>
+                {entry.matchBreakdown
+                  .sort((a, b) => a.match_number - b.match_number)
+                  .map(mb => (
+                    <div
+                      key={mb.match_number}
+                      className="grid grid-cols-[1fr_repeat(3,56px)] sm:grid-cols-[1fr_repeat(3,72px)] items-center gap-1 sm:gap-2 px-2 py-2 rounded-lg bg-blue-900/20 hover:bg-blue-900/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded-full bg-blue-600/30 flex items-center justify-center flex-shrink-0">
+                          <Hash className="w-3 h-3 text-blue-400" />
+                        </div>
+                        <span className="text-white text-xs sm:text-sm">Match {mb.match_number}</span>
+                      </div>
+                      <div className="flex items-center justify-center gap-1 text-red-400">
+                        <Target className="w-3 h-3 flex-shrink-0" />
+                        <span className="font-semibold text-xs sm:text-sm">{mb.kills}</span>
+                      </div>
+                      <div className="flex items-center justify-center gap-1 text-emerald-400">
+                        <Swords className="w-3 h-3 flex-shrink-0" />
+                        <span className="font-semibold text-xs sm:text-sm">{mb.wins}</span>
+                      </div>
+                      <div className="text-center">
+                        <span className="font-bold text-xs sm:text-sm text-white">{mb.points}</span>
+                      </div>
+                    </div>
+                  ))}
+              </>
+            )}
+            
+            {/* Players */}
+            {hasPlayers && (
+              <>
+                <div className="grid grid-cols-[1fr_repeat(3,56px)] sm:grid-cols-[1fr_repeat(3,72px)] items-center gap-1 sm:gap-2 px-2 py-1 mt-1">
+                  <span className="text-gray-500 text-[10px] sm:text-xs uppercase font-medium">Player</span>
+                  <span className="text-gray-500 text-[10px] sm:text-xs uppercase font-medium text-center">Kills</span>
+                  <span className="text-gray-500 text-[10px] sm:text-xs uppercase font-medium text-center">Wins</span>
+                  <span className="text-gray-500 text-[10px] sm:text-xs uppercase font-medium text-center">Pts</span>
+                </div>
+                {teamPlayers.map(player => (
+                  <div
+                    key={player.id}
+                    className="grid grid-cols-[1fr_repeat(3,56px)] sm:grid-cols-[1fr_repeat(3,72px)] items-center gap-1 sm:gap-2 px-2 py-2 rounded-lg bg-gray-800/40 hover:bg-gray-700/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-6 h-6 rounded-full bg-purple-600/30 flex items-center justify-center flex-shrink-0">
+                        <User className="w-3 h-3 text-purple-400" />
+                      </div>
+                      <span className="text-white text-xs sm:text-sm truncate">{player.player_name}</span>
+                    </div>
+                    <div className="flex items-center justify-center gap-1 text-red-400">
+                      <Target className="w-3 h-3 flex-shrink-0" />
+                      <span className="font-semibold text-xs sm:text-sm">{player.kills}</span>
+                    </div>
+                    <div className="flex items-center justify-center gap-1 text-emerald-400">
+                      <Swords className="w-3 h-3 flex-shrink-0" />
+                      <span className="font-semibold text-xs sm:text-sm">{player.wins}</span>
+                    </div>
+                    <div className="text-center">
+                      <span className="font-bold text-xs sm:text-sm text-white">{player.points}</span>
+                    </div>
                   </div>
-                  <span className="text-white text-xs sm:text-sm truncate">{player.player_name}</span>
-                </div>
-                <div className="flex items-center justify-center gap-1 text-red-400">
-                  <Target className="w-3 h-3 flex-shrink-0" />
-                  <span className="font-semibold text-xs sm:text-sm">{player.kills}</span>
-                </div>
-                <div className="flex items-center justify-center gap-1 text-emerald-400">
-                  <Swords className="w-3 h-3 flex-shrink-0" />
-                  <span className="font-semibold text-xs sm:text-sm">{player.wins}</span>
-                </div>
-                <div className="text-center">
-                  <span className="font-bold text-xs sm:text-sm text-white">{player.points}</span>
-                </div>
-              </div>
-            ))}
+                ))}
+              </>
+            )}
           </div>
         )}
       </div>
     );
   };
 
-  const renderStandingsCard = (entries: PointEntry[], title: string, icon: React.ReactNode, badgeText: string, borderColor: string = 'border-gray-700/30') => (
+  const renderStandingsCard = (entries: AggregatedEntry[], title: string, icon: React.ReactNode, badgeText: string, borderColor: string = 'border-gray-700/30') => (
     <Card className={`bg-gradient-to-b from-gray-800/60 to-gray-900/40 ${borderColor} overflow-hidden`}>
       <CardHeader className="pb-3 border-b border-gray-700/30">
         <CardTitle className="text-white flex items-center gap-3 text-base sm:text-lg">
@@ -353,33 +482,67 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
         ))}
       </div>
 
-      {/* Search & Filters */}
-      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input
-            placeholder="Search team..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-gray-800/60 border-gray-700/50 text-white placeholder:text-gray-500 rounded-xl text-sm"
-          />
-        </div>
-        {displayMode === 'grouped' && uniqueGroups.length > 0 && (
-          <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-            <SelectTrigger className="w-full sm:w-[140px] bg-gray-800/60 border-gray-700/50 text-white rounded-xl text-sm">
-              <Filter className="w-4 h-4 mr-1 text-gray-400" />
-              <SelectValue placeholder="Group" />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700">
-              <SelectItem value="all">All Groups</SelectItem>
-              {uniqueGroups.map(g => <SelectItem key={g} value={g}>Group {g}</SelectItem>)}
-            </SelectContent>
-          </Select>
+      {/* Match View Selector + Search & Filters */}
+      <div className="flex flex-col gap-3">
+        {/* Match tabs */}
+        {hasMultipleMatches && (
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              size="sm"
+              variant={viewMode === 'total' ? 'default' : 'outline'}
+              onClick={() => setViewMode('total')}
+              className={viewMode === 'total'
+                ? 'bg-yellow-500 hover:bg-yellow-600 text-black font-bold'
+                : 'border-gray-600 text-gray-300 hover:bg-gray-700'
+              }
+            >
+              <Trophy className="w-3.5 h-3.5 mr-1" />
+              Total
+            </Button>
+            {matchNumbers.map(num => (
+              <Button
+                key={num}
+                size="sm"
+                variant={viewMode === num ? 'default' : 'outline'}
+                onClick={() => setViewMode(num)}
+                className={viewMode === num
+                  ? 'bg-primary hover:bg-primary/90'
+                  : 'border-gray-600 text-gray-300 hover:bg-gray-700'
+                }
+              >
+                Match {num}
+              </Button>
+            ))}
+          </div>
         )}
-        <Button onClick={exportAsImage} disabled={exporting} size="sm" className="bg-gray-800/60 border border-gray-700/50 text-gray-300 hover:bg-gray-700/60 rounded-xl text-sm">
-          <Image className="w-4 h-4 mr-1" />
-          {exporting ? '...' : 'Export'}
-        </Button>
+
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input
+              placeholder="Search team..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 bg-gray-800/60 border-gray-700/50 text-white placeholder:text-gray-500 rounded-xl text-sm"
+            />
+          </div>
+          {displayMode === 'grouped' && uniqueGroups.length > 0 && (
+            <Select value={selectedGroup} onValueChange={setSelectedGroup}>
+              <SelectTrigger className="w-full sm:w-[140px] bg-gray-800/60 border-gray-700/50 text-white rounded-xl text-sm">
+                <Filter className="w-4 h-4 mr-1 text-gray-400" />
+                <SelectValue placeholder="Group" />
+              </SelectTrigger>
+              <SelectContent className="bg-gray-800 border-gray-700">
+                <SelectItem value="all">All Groups</SelectItem>
+                {uniqueGroups.map(g => <SelectItem key={g} value={g}>Group {g}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          <Button onClick={exportAsImage} disabled={exporting} size="sm" className="bg-gray-800/60 border border-gray-700/50 text-gray-300 hover:bg-gray-700/60 rounded-xl text-sm">
+            <Image className="w-4 h-4 mr-1" />
+            {exporting ? '...' : 'Export'}
+          </Button>
+        </div>
       </div>
 
       {/* Top 3 Podium */}
@@ -389,7 +552,9 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
             <div className="text-center mb-4">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/20">
                 <Flame className="w-3.5 h-3.5 text-yellow-400" />
-                <span className="text-yellow-400 font-semibold text-xs sm:text-sm">Top Performers</span>
+                <span className="text-yellow-400 font-semibold text-xs sm:text-sm">
+                  {viewMode === 'total' ? 'Top Performers' : `Match ${viewMode} Top Performers`}
+                </span>
               </div>
             </div>
             <TopThreePodium entries={sortedEntries} />
@@ -413,7 +578,12 @@ const TournamentPointsTable = ({ tournamentId }: TournamentPointsTableProps) => 
           })}
         </div>
       ) : (
-        renderStandingsCard(sortedEntries, 'Tournament Standings', <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-white" />, `${sortedEntries.length} teams`)
+        renderStandingsCard(
+          sortedEntries,
+          viewMode === 'total' ? 'Tournament Standings' : `Match ${viewMode} Standings`,
+          <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-white" />,
+          `${sortedEntries.length} teams`
+        )
       )}
 
       {/* Overall (grouped mode) */}
