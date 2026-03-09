@@ -27,6 +27,7 @@ const TournamentRegistrationComponent: React.FC<TournamentRegistrationProps> = (
   const [userProfile, setUserProfile] = useState<any>(null);
   const [showRegistrationDialog, setShowRegistrationDialog] = useState(false);
   const [showPaymentRetryDialog, setShowPaymentRetryDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   
   const { user } = useAuth();
   const { toast } = useToast();
