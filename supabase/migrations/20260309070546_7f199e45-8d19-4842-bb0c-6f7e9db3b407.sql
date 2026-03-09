@@ -1,0 +1,1 @@
+ALTER TABLE public.tournament_points ADD COLUMN IF NOT EXISTS match_number integer NOT NULL DEFAULT 1;
