@@ -1048,6 +1048,7 @@ export type Database = {
           created_at: string
           id: string
           kills: number
+          match_number: number | null
           player_name: string
           points: number
           team_id: string
@@ -1060,6 +1061,7 @@ export type Database = {
           created_at?: string
           id?: string
           kills?: number
+          match_number?: number | null
           player_name: string
           points?: number
           team_id: string
@@ -1072,6 +1074,7 @@ export type Database = {
           created_at?: string
           id?: string
           kills?: number
+          match_number?: number | null
           player_name?: string
           points?: number
           team_id?: string
