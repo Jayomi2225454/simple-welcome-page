@@ -235,7 +235,7 @@ const PlayerPointsAdmin = ({ tournamentId, selectedMatch, totalMatches }: Player
         .from('tournament_player_points')
         .select('*')
         .eq('tournament_id', tournamentId)
-        .eq('match_number', selectedMatch);
+        .eq('match_number', selectedMatch) as any;
 
       const pointsMap: Record<string, { points: number; kills: number; wins: number }> = {};
       (playerPoints || []).forEach(pp => {
