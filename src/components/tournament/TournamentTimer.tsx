@@ -14,7 +14,7 @@ const TournamentTimer: React.FC<TournamentTimerProps> = ({ tournament }) => {
   const [displayText, setDisplayText] = useState('');
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
     const checkTimer = () => {
       const now = new Date();
