@@ -12,7 +12,7 @@ const TournamentCardTimer: React.FC<TournamentCardTimerProps> = ({ tournament })
   const [timerType, setTimerType] = useState<'countdown' | 'duration' | 'none'>('none');
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
     const checkTimer = () => {
       const now = new Date();
