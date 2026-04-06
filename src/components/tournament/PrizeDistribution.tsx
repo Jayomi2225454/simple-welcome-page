@@ -12,46 +12,32 @@ const PrizeDistribution: React.FC<PrizeDistributionProps> = ({
   prizesContent, 
   isPreview = false 
 }) => {
-  // Default prize structure if no content provided
-  const defaultPrizes = {
-    positions: [
-      {
-        position: 1,
-        title: "1st Place",
-        amount: "₹6000",
-        description: "60% of Prize Pool + Champion Trophy",
-        color: "from-yellow-400 to-yellow-600"
-      },
-      {
-        position: 2,
-        title: "2nd Place", 
-        amount: "₹3000",
-        description: "30% of Prize Pool + Silver Medal",
-        color: "from-gray-300 to-gray-500"
-      },
-      {
-        position: 3,
-        title: "3rd Place",
-        amount: "₹1000", 
-        description: "10% of Prize Pool + Bronze Medal",
-        color: "from-orange-400 to-orange-600"
-      }
-    ],
-    additional_rewards: [
-      {
-        title: "MVP Award",
-        description: "Special recognition and in-game cosmetic items for the Most Valuable Player."
-      },
-      {
-        title: "Participation Rewards",
-        description: "All participants receive exclusive in-game items and Battle Mitra profile badges."
-      }
-    ]
-  };
+  const hasPrizes = prizesContent && prizesContent.positions && prizesContent.positions.length > 0;
 
-  const prizes = (prizesContent && prizesContent.positions && prizesContent.positions.length > 0) 
-    ? prizesContent 
-    : defaultPrizes;
+  if (!hasPrizes) {
+    return (
+      <div className="space-y-10">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full mb-4 shadow-2xl animate-pulse">
+            <Sparkles className="w-8 h-8 text-white" />
+          </div>
+          <h3 className="text-4xl font-bold bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 bg-clip-text text-transparent mb-2">
+            Prize Distribution
+          </h3>
+          <div className="w-32 h-1 bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 mx-auto rounded-full shadow-lg mb-8" />
+        </div>
+        <Card className="bg-gradient-to-br from-purple-500/20 via-blue-500/20 to-indigo-500/20 border-2 border-purple-400/50 backdrop-blur-sm shadow-xl">
+          <CardContent className="p-12 text-center">
+            <Trophy className="w-16 h-16 text-yellow-400 mx-auto mb-4 opacity-60" />
+            <h4 className="text-2xl font-bold text-white mb-2">Coming Soon</h4>
+            <p className="text-white/70 text-lg">Prize details will be announced shortly. Stay tuned!</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const prizes = prizesContent;
 
   const getPositionIcon = (position: number) => {
     switch (position) {
