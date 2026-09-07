@@ -3,12 +3,28 @@ import { supabase } from '@/integrations/supabase/client';
 import { Tournament, Player, Match, OverviewContent, ScheduleContent, PrizesContent } from '@/types';
 
 // Helper function to convert database row to Tournament
-const convertToTournament = (dbRow: any): Tournament => {
+export const convertToTournament = (dbRow: any): Tournament => {
+  const banner = dbRow?.banner_url || dbRow?.banner || '';
+  const image = dbRow?.image_url || dbRow?.image || banner || '';
+  let overview = dbRow?.overview_content;
+  if (typeof overview === 'string') {
+    try {
+      overview = JSON.parse(overview);
+    } catch {
+      // ignore
+    }
+  }
   return {
     ...dbRow,
-    overview_content: dbRow.overview_content ? (dbRow.overview_content as OverviewContent) : undefined,
-    schedule_content: dbRow.schedule_content ? (dbRow.schedule_content as ScheduleContent) : undefined,
-    prizes_content: dbRow.prizes_content ? (dbRow.prizes_content as PrizesContent) : undefined,
+    banner,
+    banner_url: banner,
+    image,
+    image_url: image,
+    enforce_cap: dbRow?.enforce_cap ?? (typeof overview === 'object' && overview ? (overview as any).enforce_cap : undefined),
+    registration_status: dbRow?.registration_status ?? (typeof overview === 'object' && overview ? (overview as any).registration_status : undefined),
+    overview_content: overview ? (overview as OverviewContent) : undefined,
+    schedule_content: dbRow?.schedule_content ? (dbRow.schedule_content as ScheduleContent) : undefined,
+    prizes_content: dbRow?.prizes_content ? (dbRow.prizes_content as PrizesContent) : undefined,
   };
 };
 
@@ -16,6 +32,18 @@ const convertToTournament = (dbRow: any): Tournament => {
 const convertToDbFormat = (tournament: any) => {
   const dbTournament = { ...tournament };
   
+  // If enforce_cap is provided, also embed it inside overview_content for resilience
+  if (dbTournament.enforce_cap !== undefined) {
+    let ov = dbTournament.overview_content || {};
+    if (typeof ov === 'string') {
+      try { ov = JSON.parse(ov); } catch {}
+    }
+    dbTournament.overview_content = {
+      ...(typeof ov === 'object' && ov ? ov : {}),
+      enforce_cap: dbTournament.enforce_cap,
+    };
+  }
+
   // Convert content objects to JSON
   if (dbTournament.overview_content) {
     dbTournament.overview_content = JSON.stringify(dbTournament.overview_content);
@@ -45,12 +73,34 @@ export const tournamentService = {
     return (data || []).map(convertToTournament);
   },
 
+  async getById(id: string): Promise<Tournament | null> {
+    const { data, error } = await supabase
+      .from('tournaments')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching tournament by id:', error);
+      return null;
+    }
+    return data ? convertToTournament(data) : null;
+  },
+
   async create(tournament: Omit<Tournament, 'id' | 'created_at' | 'updated_at'>): Promise<Tournament> {
     // Clean up the tournament data - remove empty strings and undefined values
     let tournamentData = { ...tournament };
+
+    // Ensure banner_url and image_url are set from banner and image if provided
+    if (tournamentData.banner && !tournamentData.banner_url) {
+      tournamentData.banner_url = tournamentData.banner;
+    }
+    if (tournamentData.image && !tournamentData.image_url) {
+      tournamentData.image_url = tournamentData.image;
+    }
     
     // Remove fields that don't exist in the database
-    const invalidFields = ['image', 'highlights', 'winners', 'prizes', 'start_time', 'end_time', 'registration_opens', 'registration_closes', 'entry_fee_type'];
+    const invalidFields = ['image', 'banner', 'highlights', 'winners', 'prizes', 'start_time', 'end_time', 'registration_opens', 'registration_closes', 'entry_fee_type'];
     invalidFields.forEach(field => {
       delete tournamentData[field];
     });
@@ -82,11 +132,25 @@ export const tournamentService = {
 
     console.log('Creating tournament with cleaned data:', dbData);
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('tournaments')
       .insert([dbData])
       .select()
       .single();
+    
+    if (error && (error.message?.includes('enforce_cap') || error.message?.includes('registration_status') || error.code === 'PGRST204')) {
+      console.warn('Retrying insert without enforce_cap/registration_status columns:', error.message);
+      const fallbackData = { ...dbData };
+      delete fallbackData.enforce_cap;
+      delete fallbackData.registration_status;
+      const retryResult = await supabase
+        .from('tournaments')
+        .insert([fallbackData])
+        .select()
+        .single();
+      data = retryResult.data;
+      error = retryResult.error;
+    }
     
     if (error) {
       console.error('Error creating tournament:', error);
@@ -98,9 +162,17 @@ export const tournamentService = {
   async update(id: string, tournament: Partial<Tournament>): Promise<Tournament> {
     // Clean up the tournament data - remove empty strings and undefined values
     let updateData = { ...tournament };
+
+    // Ensure banner_url and image_url are set from banner and image if provided
+    if (updateData.banner && !updateData.banner_url) {
+      updateData.banner_url = updateData.banner;
+    }
+    if (updateData.image && !updateData.image_url) {
+      updateData.image_url = updateData.image;
+    }
     
     // Remove fields that don't exist in the database
-    const invalidFields = ['image', 'highlights', 'winners', 'prizes', 'start_time', 'end_time', 'registration_opens', 'registration_closes', 'entry_fee_type'];
+    const invalidFields = ['image', 'banner', 'highlights', 'winners', 'prizes', 'start_time', 'end_time', 'registration_opens', 'registration_closes', 'entry_fee_type'];
     invalidFields.forEach(field => {
       delete updateData[field];
     });
@@ -128,12 +200,27 @@ export const tournamentService = {
 
     console.log('Updating tournament with cleaned data:', dbData);
     
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('tournaments')
       .update(dbData)
       .eq('id', id)
       .select()
       .single();
+    
+    if (error && (error.message?.includes('enforce_cap') || error.message?.includes('registration_status') || error.code === 'PGRST204')) {
+      console.warn('Retrying update without enforce_cap/registration_status columns:', error.message);
+      const fallbackData = { ...dbData };
+      delete fallbackData.enforce_cap;
+      delete fallbackData.registration_status;
+      const retryResult = await supabase
+        .from('tournaments')
+        .update(fallbackData)
+        .eq('id', id)
+        .select()
+        .single();
+      data = retryResult.data;
+      error = retryResult.error;
+    }
     
     if (error) {
       console.error('Error updating tournament:', error);

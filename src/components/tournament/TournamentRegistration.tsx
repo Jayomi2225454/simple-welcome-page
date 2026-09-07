@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { tournamentRegistrationService, TournamentRegistration, TournamentRoom } from '@/services/tournamentRegistrationService';
 import { supabase } from '@/integrations/supabase/client';
-import { Tournament } from '@/types';
+import { Tournament, isNewTournamentWithCap, isTournamentRegistrationClosed } from '@/types';
 import { Users, Lock, CheckCircle, Clock, XCircle, AlertTriangle, RefreshCw, Copy, Check, Edit3 } from 'lucide-react';
 import RegistrationFormDialog from './RegistrationFormDialog';
 import PaymentRetryDialog from './PaymentRetryDialog';
@@ -41,6 +41,10 @@ const TournamentRegistrationComponent: React.FC<TournamentRegistrationProps> = (
     : parseInt(tournament.team_size || '1') || 1;
   
   const isTeamMode = teamSize > 1;
+
+  // Live registration count and cap check (enforced strictly on new tournaments)
+  const registeredCount = Math.max(registrations.length, tournament.current_participants || 0);
+  const isRegistrationFull = isTournamentRegistrationClosed(tournament, registeredCount);
 
   useEffect(() => {
     if (user) {
@@ -134,6 +138,15 @@ const TournamentRegistrationComponent: React.FC<TournamentRegistrationProps> = (
   };
 
   const handleRegister = async () => {
+    if (isRegistrationFull) {
+      toast({
+        title: "Registration Full / Closed",
+        description: `This tournament has reached its maximum limit of ${tournament.max_participants} participants.`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (!user || !userProfile) {
       toast({
         title: "Profile Required",
@@ -359,16 +372,42 @@ const TournamentRegistrationComponent: React.FC<TournamentRegistrationProps> = (
             </div>
           )}
 
+          {/* Registration Full Notice */}
+          {!userRegistration && isRegistrationFull && (
+            <div className="p-4 bg-amber-500/15 border border-amber-400/40 rounded-xl space-y-1 text-center animate-fade-in">
+              <div className="flex items-center justify-center gap-2 text-amber-300 font-bold text-base">
+                <Lock className="w-5 h-5 text-amber-400" />
+                <span>Registration Full / Closed</span>
+              </div>
+              <p className="text-xs sm:text-sm text-amber-200/90">
+                All {tournament.max_participants} participant slots have been filled. Registration is now officially closed.
+              </p>
+            </div>
+          )}
+
           {/* Register Button - Show only if not registered */}
           {!userRegistration && (
             <Button 
               onClick={handleRegister} 
-              disabled={isLoading || registrations.length >= tournament.max_participants}
-              className="w-full bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white font-bold py-3 text-lg shadow-xl"
+              disabled={isLoading || isRegistrationFull}
+              className={`w-full font-bold py-3 text-lg shadow-xl transition-all ${
+                isRegistrationFull
+                  ? 'bg-gray-700/80 text-gray-400 cursor-not-allowed border border-gray-600 hover:bg-gray-700/80'
+                  : 'bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white'
+              }`}
             >
-              {isLoading ? 'Processing...' : 
-               registrations.length >= tournament.max_participants ? 'Tournament Full' :
-               isFree ? 'Register Now' : `Register (₹${entryFeeAmount})`}
+              {isLoading ? (
+                'Processing...'
+              ) : isRegistrationFull ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Lock className="w-5 h-5" />
+                  Registration Full / Closed
+                </span>
+              ) : isFree ? (
+                'Register Now'
+              ) : (
+                `Register (₹${entryFeeAmount})`
+              )}
             </Button>
           )}
         </CardContent>

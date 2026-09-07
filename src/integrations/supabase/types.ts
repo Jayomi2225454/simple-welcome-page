@@ -1288,10 +1288,13 @@ export type Database = {
           captain_user_id: string
           created_at: string
           current_members: number
+          group_name?: string | null
           id: string
           is_full: boolean
           max_members: number
+          password?: string | null
           status: string
+          team_code?: string | null
           team_name: string
           tournament_id: string
           updated_at: string
@@ -1300,10 +1303,13 @@ export type Database = {
           captain_user_id: string
           created_at?: string
           current_members?: number
+          group_name?: string | null
           id?: string
           is_full?: boolean
           max_members: number
+          password?: string | null
           status?: string
+          team_code?: string | null
           team_name: string
           tournament_id: string
           updated_at?: string
@@ -1312,10 +1318,13 @@ export type Database = {
           captain_user_id?: string
           created_at?: string
           current_members?: number
+          group_name?: string | null
           id?: string
           is_full?: boolean
           max_members?: number
+          password?: string | null
           status?: string
+          team_code?: string | null
           team_name?: string
           tournament_id?: string
           updated_at?: string

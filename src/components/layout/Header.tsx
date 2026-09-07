@@ -12,12 +12,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [showLiveChat, setShowLiveChat] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, signOut, loading } = useAuth();
+  const { user, signOut, loading, isAdmin: authIsAdmin } = useAuth();
   const { mode, isEsports, isSports } = useMode();
+
+  const [isAdmin, setIsAdmin] = useState(() => {
+    return localStorage.getItem('bm_is_admin') === 'true';
+  });
 
   // Esports navigation
   const esportsNavigation = [
@@ -40,32 +43,13 @@ const Header = () => {
 
   const isActive = (path: string) => location.pathname === path;
 
-  // Check if user is admin
   useEffect(() => {
-    const checkAdminRole = async () => {
-      if (!user) {
-        setIsAdmin(false);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase.rpc('has_role', {
-          _user_id: user.id,
-          _role: 'admin'
-        });
-
-        if (!error && data === true) {
-          setIsAdmin(true);
-        } else {
-          setIsAdmin(false);
-        }
-      } catch {
-        setIsAdmin(false);
-      }
-    };
-
-    checkAdminRole();
-  }, [user]);
+    if (authIsAdmin) {
+      setIsAdmin(true);
+    } else if (!user) {
+      setIsAdmin(false);
+    }
+  }, [authIsAdmin, user]);
 
   const handleSignOut = async () => {
     await signOut();

@@ -15,8 +15,10 @@ import BattleCodeAdmin from '@/components/admin/BattleCodeAdmin';
 
 const SportsAdmin = () => {
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { user, loading, isAdmin: authIsAdmin } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(() => {
+    return localStorage.getItem('bm_is_admin') === 'true';
+  });
   const [checkingAdmin, setCheckingAdmin] = useState(true);
 
   useEffect(() => {
@@ -24,6 +26,12 @@ const SportsAdmin = () => {
       if (!user) {
         setCheckingAdmin(false);
         return;
+      }
+
+      const cachedAdmin = authIsAdmin || localStorage.getItem(`bm_admin_${user.id}`) === 'true';
+      if (cachedAdmin) {
+        setIsAdmin(true);
+        setCheckingAdmin(false);
       }
 
       try {
@@ -34,13 +42,23 @@ const SportsAdmin = () => {
 
         if (!error && data === true) {
           setIsAdmin(true);
-        } else {
+          localStorage.setItem(`bm_admin_${user.id}`, 'true');
+          localStorage.setItem('bm_is_admin', 'true');
+        } else if (!error && data === false) {
+          setIsAdmin(false);
+          localStorage.setItem(`bm_admin_${user.id}`, 'false');
+          localStorage.setItem('bm_is_admin', 'false');
           toast.error('Access denied. Admin privileges required.');
+          navigate('/sports');
+        } else if (error && !cachedAdmin) {
+          toast.error('Failed to verify admin access');
           navigate('/sports');
         }
       } catch {
-        toast.error('Failed to verify admin access');
-        navigate('/sports');
+        if (!cachedAdmin) {
+          toast.error('Failed to verify admin access');
+          navigate('/sports');
+        }
       } finally {
         setCheckingAdmin(false);
       }
@@ -53,7 +71,7 @@ const SportsAdmin = () => {
         checkAdminRole();
       }
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, authIsAdmin, navigate]);
 
   if (loading || checkingAdmin) {
     return (

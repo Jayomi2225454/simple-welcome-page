@@ -70,6 +70,7 @@ const App = () => (
                 <Route path="/wallet" element={<Wallet />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/auth" element={<Auth />} />
+                <Route path="/reset-password" element={<Auth />} />
                 <Route path="/profile" element={<Profile />} />
                 
                 {/* Sports Routes */}

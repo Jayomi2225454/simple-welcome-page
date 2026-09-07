@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Calendar, Users, MapPin, Clock, Trophy, ArrowLeft, Gamepad, Crown, Medal, Award, PlayCircle, CheckCircle, Timer, TableIcon, Swords } from 'lucide-react';
+import { Calendar, Users, MapPin, Clock, Trophy, ArrowLeft, Gamepad, Crown, Medal, Award, PlayCircle, CheckCircle, Timer, TableIcon, Swords, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,6 +14,8 @@ import TournamentPointsTable from '@/components/tournament/TournamentPointsTable
 import TournamentMatchScores from '@/components/tournament/TournamentMatchScores';
 import { useGameStore } from '@/store/gameStore';
 import { supabase } from '@/integrations/supabase/client';
+import { convertToTournament } from '@/services/supabaseService';
+import { Tournament, isTournamentRegistrationClosed, isNewTournamentWithCap } from '@/types';
 
 interface TournamentWinner {
   id: string;
@@ -29,6 +31,11 @@ const TournamentDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { tournaments, initialize } = useGameStore();
+  const [tournament, setTournament] = useState<Tournament | null>(() => {
+    return tournaments.find(t => t.id === id) || null;
+  });
+  const [loadingTournament, setLoadingTournament] = useState(!tournament);
+  const [bannerLoaded, setBannerLoaded] = useState(false);
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [winners, setWinners] = useState<TournamentWinner[]>([]);
   const [loadingWinners, setLoadingWinners] = useState(false);
@@ -37,7 +44,42 @@ const TournamentDetail = () => {
     initialize();
   }, [initialize]);
 
-  const tournament = tournaments.find(t => t.id === id);
+  // Fetch tournament directly from database to guarantee immediate banner load and state update
+  useEffect(() => {
+    if (!id) return;
+
+    // Sync from store first if available
+    const storeTournament = tournaments.find(t => t.id === id);
+    if (storeTournament) {
+      setTournament(storeTournament);
+    }
+
+    const fetchTournamentDetail = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('tournaments')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error fetching tournament details:', error);
+          return;
+        }
+
+        if (data) {
+          const mapped = convertToTournament(data);
+          setTournament(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to load tournament:', err);
+      } finally {
+        setLoadingTournament(false);
+      }
+    };
+
+    fetchTournamentDetail();
+  }, [id, tournaments]);
 
   // Fetch winners from database
   useEffect(() => {
@@ -88,6 +130,17 @@ const TournamentDetail = () => {
     return () => clearInterval(timer);
   }, [tournament]);
 
+  if (loadingTournament && !tournament) {
+    return (
+      <Layout>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 flex flex-col justify-center items-center min-h-[400px]">
+          <Loader2 className="w-10 h-10 animate-spin text-purple-500 mb-4" />
+          <p className="text-gray-400 text-lg">Loading tournament details...</p>
+        </div>
+      </Layout>
+    );
+  }
+
   if (!tournament) {
     return (
       <Layout>
@@ -103,49 +156,60 @@ const TournamentDetail = () => {
     );
   }
 
+  const isRegistrationClosed = isTournamentRegistrationClosed(tournament);
+  const bannerUrl = tournament.banner || tournament.banner_url || tournament.image || tournament.image_url;
+
   return (
     <Layout>
       <div className="min-h-screen">
         {/* Hero Section */}
         <div className="relative h-[250px] sm:h-[350px] md:h-[450px] lg:h-[500px] overflow-hidden animate-fade-in">
-          {tournament.banner ? (
+          {bannerUrl ? (
             <img 
-              src={tournament.banner} 
+              key={bannerUrl}
+              src={bannerUrl} 
               alt={tournament.name}
-              className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700"
+              loading="eager"
+              onLoad={() => setBannerLoaded(true)}
+              className={`w-full h-full object-cover transform hover:scale-105 transition-all duration-700 ${bannerLoaded ? 'opacity-100' : 'opacity-90'}`}
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-purple-900/50 to-blue-900/50"></div>
+            <div className="w-full h-full bg-gradient-to-br from-purple-900/40 to-blue-900/40"></div>
           )}
-          <div className="absolute inset-0 bg-black/50"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/70 to-transparent" />
           
-          <div className="absolute inset-0 flex flex-col justify-between">
-            <div className="p-3 sm:p-4 md:p-6 animate-slide-in-right">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => navigate('/tournaments')}
-                className="text-white hover:bg-white/20 transform hover:scale-105 transition-transform duration-200"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Tournaments
-              </Button>
-            </div>
-            
-            <div className="p-3 sm:p-4 md:p-6 animate-slide-in-right animation-delay-300">
-              <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-2 sm:mb-4">
+          <Button 
+            variant="ghost" 
+            className="absolute top-4 left-4 text-white hover:bg-black/30 backdrop-blur-sm transition-all duration-200"
+            onClick={() => navigate('/tournaments')}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Tournaments
+          </Button>
+
+          <div className="absolute bottom-4 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6 md:bottom-8 md:left-8 md:right-8">
+            <div className="max-w-4xl">
+              <div className="flex flex-wrap gap-2 mb-2 sm:mb-4">
                 <Badge variant="secondary" className="bg-purple-500 text-white transform hover:scale-105 transition-transform duration-200">
                   {tournament.game || 'battle-royale'}
                 </Badge>
                 <Badge 
                   variant="secondary" 
                   className={
+                    isRegistrationClosed ? 'bg-amber-600 text-white font-bold flex items-center gap-1 shadow-md' :
                     tournament.status === 'upcoming' ? 'bg-blue-500 text-white' :
-                    tournament.status === 'ongoing' ? 'bg-green-500 text-white' :
+                    tournament.status === 'ongoing' ? 'bg-green-500 text-white animate-pulse' :
                     'bg-gray-500 text-white'
                   }
                 >
-                  {tournament.status.toUpperCase()}
+                  {isRegistrationClosed ? (
+                    <>
+                      <Lock className="w-3.5 h-3.5" />
+                      FULL / CLOSED
+                    </>
+                  ) : (
+                    tournament.status.toUpperCase()
+                  )}
                 </Badge>
                 {tournament.entry_fee && (
                   <Badge variant="secondary" className="bg-green-500 text-white">
@@ -167,8 +231,11 @@ const TournamentDetail = () => {
                 </div>
                 <div className="flex items-center">
                   <Users className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 flex-shrink-0" />
-                  <span className="text-xs sm:text-sm">
+                  <span className="text-xs sm:text-sm font-semibold">
                     {tournament.current_participants}/{tournament.max_participants}
+                    {isRegistrationClosed && (
+                      <span className="ml-1.5 text-amber-300 font-bold">(Full)</span>
+                    )}
                   </span>
                 </div>
                 <div className="flex items-center">
@@ -196,25 +263,30 @@ const TournamentDetail = () => {
 
         {/* Tournament Status Banner */}
         <div className={`py-4 ${
+          isRegistrationClosed && tournament.status !== 'ongoing' && tournament.status !== 'completed'
+            ? 'bg-gradient-to-r from-amber-700 via-orange-700 to-red-800' :
           tournament.status === 'upcoming' ? 'bg-gradient-to-r from-blue-600 to-blue-800' :
           tournament.status === 'ongoing' ? 'bg-gradient-to-r from-green-600 to-green-800 animate-pulse' :
           'bg-gradient-to-r from-gray-600 to-gray-800'
         }`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-center gap-4">
-              {tournament.status === 'upcoming' && (
+              {isRegistrationClosed && tournament.status !== 'ongoing' && tournament.status !== 'completed' ? (
+                <>
+                  <Lock className="w-6 h-6 text-white" />
+                  <span className="text-white text-lg font-bold">REGISTRATION FULL / CLOSED (All {tournament.max_participants} Slots Filled)</span>
+                </>
+              ) : tournament.status === 'upcoming' ? (
                 <>
                   <Timer className="w-6 h-6 text-white" />
                   <span className="text-white text-lg font-bold">UPCOMING - Registration Open</span>
                 </>
-              )}
-              {tournament.status === 'ongoing' && (
+              ) : tournament.status === 'ongoing' ? (
                 <>
                   <PlayCircle className="w-6 h-6 text-white animate-bounce" />
                   <span className="text-white text-lg font-bold">🔴 LIVE - Tournament In Progress</span>
                 </>
-              )}
-              {tournament.status === 'completed' && (
+              ) : (
                 <>
                   <CheckCircle className="w-6 h-6 text-white" />
                   <span className="text-white text-lg font-bold">✅ COMPLETED - See Results Below</span>

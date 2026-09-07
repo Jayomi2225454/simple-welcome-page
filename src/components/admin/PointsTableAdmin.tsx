@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Save, Edit, Users, Trophy, Shuffle, Upload, Camera, Loader2, Check, X, AlertCircle, Hash } from 'lucide-react';
+import { Plus, Trash2, Save, Edit, Users, Trophy, Shuffle, Upload, Camera, Loader2, Check, X, AlertCircle, Hash, Layers, Split, ArrowRightLeft, Settings2, Sparkles, Filter, CheckCircle2, ChevronRight, LayoutGrid, ListFilter, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useGameStore } from '@/store/gameStore';
@@ -60,6 +60,16 @@ const PointsTableAdmin = () => {
   const tableDirtyRef = useRef(false);
   const pointsEntriesRef = useRef(pointsEntries);
 
+  // Multi-table / Group distribution states
+  const [showDistributionDialog, setShowDistributionDialog] = useState(false);
+  const [distributionTargetCount, setDistributionTargetCount] = useState<number>(2);
+  const [distributionChoice, setDistributionChoice] = useState<'auto' | 'manual'>('auto');
+  const [showManualAssignDialog, setShowManualAssignDialog] = useState(false);
+  const [tempManualAssignments, setTempManualAssignments] = useState<Record<string, string | null>>({});
+  const [activeTableFilter, setActiveTableFilter] = useState<string>('all');
+  const [tableViewMode, setTableViewMode] = useState<'split' | 'consolidated'>('split');
+  const [manualSearchQuery, setManualSearchQuery] = useState('');
+
   // Match management
   const [selectedMatch, setSelectedMatch] = useState<number>(1);
   const [totalMatches, setTotalMatches] = useState<number>(1);
@@ -110,8 +120,15 @@ const PointsTableAdmin = () => {
       setPointsEntries(data || []);
       
       // Detect group mode from existing data
-      const hasGroups = data?.some(entry => entry.group_name);
-      setGroupMode(hasGroups ? 'multiple' : 'single');
+      const existingGroups = [...new Set(data?.map(e => e.group_name).filter(Boolean))] as string[];
+      if (existingGroups.length > 0) {
+        setGroupMode('multiple');
+        const detectedCount = Math.max(2, existingGroups.length);
+        setNumberOfGroups(detectedCount);
+        setDistributionTargetCount(detectedCount);
+      } else {
+        setGroupMode('single');
+      }
 
       // Detect max match number
       const maxMatch = Math.max(...(data || []).map(e => e.match_number || 1), 1);
@@ -145,7 +162,7 @@ const PointsTableAdmin = () => {
     } else {
       const groups = new Map<string, PointEntry[]>();
       sorted.forEach(entry => {
-        const group = entry.group_name || 'A';
+        const group = entry.group_name || 'unassigned';
         if (!groups.has(group)) groups.set(group, []);
         groups.get(group)!.push(entry);
       });
@@ -158,8 +175,8 @@ const PointsTableAdmin = () => {
             .sort((a, b) => b.points - a.points)
             .map((entry, idx) => ({
               ...entry,
-              group_name: groupName,
-              position_in_group: idx + 1,
+              group_name: groupName === 'unassigned' ? null : groupName,
+              position_in_group: groupName === 'unassigned' ? null : idx + 1,
             }));
         });
 
@@ -181,24 +198,32 @@ const PointsTableAdmin = () => {
       // Always fetch teams from the database tournament_teams table
       const { data: dbTeams, error: teamsError } = await supabase
         .from('tournament_teams')
-        .select('id, team_name')
+        .select('id, team_name, group_name')
         .eq('tournament_id', selectedTournament)
         .order('team_name');
 
       if (teamsError) throw teamsError;
 
       if (dbTeams && dbTeams.length > 0) {
+        // Carry forward previous match group assignments if any
+        const prevMatchEntries = pointsEntries.filter(e => (e.match_number || 1) === totalMatches);
+        const groupMap: Record<string, string | null> = {};
+        prevMatchEntries.forEach(e => {
+          if (e.group_name) groupMap[e.team_id] = e.group_name;
+        });
+
         for (const team of dbTeams) {
+          const assignedGroup = groupMap[team.id] || (team as any).group_name || null;
           await supabase.from('tournament_points').insert({
             tournament_id: selectedTournament,
             team_id: team.id,
             team_name: team.team_name,
-            group_name: null,
+            group_name: assignedGroup,
             points: 0,
             kills: 0,
             wins: 0,
             position: 1,
-            position_in_group: null,
+            position_in_group: assignedGroup ? 1 : null,
             match_number: newMatchNum,
           });
         }
@@ -369,25 +394,218 @@ const PointsTableAdmin = () => {
     }
   };
 
-  const handleDistributeTeams = () => {
+  // Automatic equal distribution with uneven remainder handled
+  const handleAutoDistributeTeams = async (targetCount?: number) => {
+    const count = targetCount || distributionTargetCount || numberOfGroups || 2;
     if (currentMatchEntries.length === 0) {
       toast({ title: "No Teams", description: "Add teams first before distributing", variant: "destructive" });
       return;
     }
 
-    const shuffled = [...currentMatchEntries].sort(() => Math.random() - 0.5);
-    const groups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].slice(0, numberOfGroups);
-    
-    const distributed = shuffled.map((entry, index) => ({
-      ...entry,
-      group_name: groups[index % numberOfGroups],
-    }));
+    setLoading(true);
+    try {
+      const groups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].slice(0, count);
+      const total = currentMatchEntries.length;
+      const base = Math.floor(total / count);
+      const remainder = total % count;
 
-    const recalculated = calculatePositions(distributed);
-    const otherEntries = pointsEntries.filter(e => (e.match_number || 1) !== selectedMatch);
-    setPointsEntries([...otherEntries, ...recalculated]);
+      // Distribute evenly: first `remainder` tables get base + 1, rest get base
+      const distributed: PointEntry[] = [];
+      let currentIndex = 0;
+      for (let i = 0; i < count; i++) {
+        const groupLetter = groups[i];
+        const groupSize = i < remainder ? base + 1 : base;
+        const groupSlice = currentMatchEntries.slice(currentIndex, currentIndex + groupSize);
+        groupSlice.forEach((entry, idx) => {
+          distributed.push({
+            ...entry,
+            group_name: groupLetter,
+            position_in_group: idx + 1,
+          });
+        });
+        currentIndex += groupSize;
+      }
 
-    toast({ title: "Teams Distributed", description: `Teams distributed across ${numberOfGroups} groups` });
+      const recalculated = calculatePositions(distributed);
+      const otherEntries = pointsEntries.filter(e => (e.match_number || 1) !== selectedMatch);
+      setPointsEntries([...otherEntries, ...recalculated]);
+      setGroupMode('multiple');
+      setNumberOfGroups(count);
+
+      // Persist to Supabase tournament_points
+      for (const entry of recalculated) {
+        if (entry.id) {
+          await supabase
+            .from('tournament_points')
+            .update({
+              group_name: entry.group_name,
+              position: entry.position,
+              position_in_group: entry.position_in_group,
+            })
+            .eq('id', entry.id);
+        }
+        // Also sync tournament_teams so subsequent matches remember group assignments
+        if (entry.team_id) {
+          await supabase
+            .from('tournament_teams')
+            .update({ group_name: entry.group_name })
+            .eq('id', entry.team_id);
+        }
+      }
+
+      setShowDistributionDialog(false);
+      toast({
+        title: "Teams Distributed Successfully",
+        description: `Divided ${total} teams across ${count} tables (${base}${remainder > 0 ? `-${base + 1}` : ''} teams per table)`,
+      });
+    } catch (error: any) {
+      console.error('Error distributing teams:', error);
+      toast({ title: "Distribution Failed", description: error.message || "Failed to save table distribution", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Move a single team to a different table/group
+  const handleMoveTeamToGroup = async (entryId: string, targetGroup: string | null) => {
+    try {
+      const updatedEntries = pointsEntries.map(e =>
+        e.id === entryId ? { ...e, group_name: targetGroup } : e
+      );
+      const matchEntries = updatedEntries.filter(e => (e.match_number || 1) === selectedMatch);
+      const otherEntries = updatedEntries.filter(e => (e.match_number || 1) !== selectedMatch);
+      const recalculated = calculatePositions(matchEntries);
+      setPointsEntries([...otherEntries, ...recalculated]);
+
+      const movedEntry = recalculated.find(e => e.id === entryId);
+      if (movedEntry) {
+        await supabase
+          .from('tournament_points')
+          .update({
+            group_name: movedEntry.group_name,
+            position: movedEntry.position,
+            position_in_group: movedEntry.position_in_group,
+          })
+          .eq('id', entryId);
+
+        if (movedEntry.team_id) {
+          await supabase
+            .from('tournament_teams')
+            .update({ group_name: movedEntry.group_name })
+            .eq('id', movedEntry.team_id);
+        }
+      }
+
+      // Update positions of all teams in the affected match
+      await updateAllPositions(recalculated);
+
+      toast({
+        title: "Table Updated",
+        description: targetGroup ? `Moved team to Table ${targetGroup}` : "Moved team to unassigned",
+      });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to move team", variant: "destructive" });
+    }
+  };
+
+  // Open manual assignment modal
+  const openManualAssignmentModal = (count?: number) => {
+    const targetCount = count || distributionTargetCount || numberOfGroups || 2;
+    const initialMap: Record<string, string | null> = {};
+    currentMatchEntries.forEach(entry => {
+      initialMap[entry.id || entry.team_name] = entry.group_name || 'A';
+    });
+    setTempManualAssignments(initialMap);
+    setDistributionTargetCount(targetCount);
+    setShowDistributionDialog(false);
+    setShowManualAssignDialog(true);
+  };
+
+  // Save manual assignments
+  const handleSaveManualAssignments = async () => {
+    setLoading(true);
+    try {
+      const updatedMatchEntries = currentMatchEntries.map(entry => {
+        const key = entry.id || entry.team_name;
+        const assignedGroup = tempManualAssignments[key] ?? entry.group_name;
+        return {
+          ...entry,
+          group_name: assignedGroup,
+        };
+      });
+
+      const recalculated = calculatePositions(updatedMatchEntries);
+      const otherEntries = pointsEntries.filter(e => (e.match_number || 1) !== selectedMatch);
+      setPointsEntries([...otherEntries, ...recalculated]);
+      setGroupMode('multiple');
+
+      for (const entry of recalculated) {
+        if (entry.id) {
+          await supabase
+            .from('tournament_points')
+            .update({
+              group_name: entry.group_name,
+              position: entry.position,
+              position_in_group: entry.position_in_group,
+            })
+            .eq('id', entry.id);
+        }
+        if (entry.team_id) {
+          await supabase
+            .from('tournament_teams')
+            .update({ group_name: entry.group_name })
+            .eq('id', entry.team_id);
+        }
+      }
+
+      setShowManualAssignDialog(false);
+      toast({ title: "Assignments Saved", description: "Manual table assignments updated successfully" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to save assignments", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Reset all teams in current match to a single table
+  const handleResetToSingleTable = async () => {
+    if (currentMatchEntries.length === 0) return;
+    setLoading(true);
+    try {
+      const clearedEntries = currentMatchEntries.map(e => ({
+        ...e,
+        group_name: null,
+        position_in_group: null,
+      }));
+      const recalculated = calculatePositions(clearedEntries);
+      const otherEntries = pointsEntries.filter(e => (e.match_number || 1) !== selectedMatch);
+      setPointsEntries([...otherEntries, ...recalculated]);
+      setGroupMode('single');
+
+      for (const entry of recalculated) {
+        if (entry.id) {
+          await supabase
+            .from('tournament_points')
+            .update({
+              group_name: null,
+              position: entry.position,
+              position_in_group: null,
+            })
+            .eq('id', entry.id);
+        }
+        if (entry.team_id) {
+          await supabase
+            .from('tournament_teams')
+            .update({ group_name: null })
+            .eq('id', entry.team_id);
+        }
+      }
+      toast({ title: "Reset Complete", description: "All teams combined into a single unified table" });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to reset table", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Keep ref in sync
@@ -450,8 +668,10 @@ const PointsTableAdmin = () => {
     triggerTableAutoSave();
   };
 
-  // Get unique groups from current match entries
-  const uniqueGroups = [...new Set(currentMatchEntries.map(e => e.group_name).filter(Boolean))].sort();
+  // Get unique groups and unassigned teams from current match entries
+  const uniqueGroups = [...new Set(currentMatchEntries.map(e => e.group_name).filter(Boolean))].sort() as string[];
+  const availableGroups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].slice(0, Math.max(numberOfGroups, uniqueGroups.length, 2));
+  const unassignedEntries = currentMatchEntries.filter(e => !e.group_name);
 
   // OCR Functions
   const handleOCRFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -653,43 +873,121 @@ const PointsTableAdmin = () => {
           </Select>
 
           {selectedTournament && (
-            <div className="grid md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Group Mode</label>
-                <Select value={groupMode} onValueChange={(v: 'single' | 'multiple') => setGroupMode(v)}>
-                  <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-700 border-gray-600">
-                    <SelectItem value="single">Single Group</SelectItem>
-                    <SelectItem value="multiple">Multiple Groups</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="bg-gray-900/60 p-4 rounded-xl border border-gray-700/80 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-700/60">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                    <Split className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-semibold text-base">Table & Group Structure</h3>
+                    <p className="text-xs text-gray-400">
+                      Divide teams into 2, 3, or 4 separate tables/pools, or manage as one unified table.
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Active structure badge */}
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  {groupMode === 'single' ? (
+                    <Badge variant="outline" className="border-blue-500/40 text-blue-300 bg-blue-500/10 px-2.5 py-1 text-xs">
+                      1 Unified Table ({currentMatchEntries.length} Teams)
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-purple-500/40 text-purple-300 bg-purple-500/10 px-2.5 py-1 text-xs">
+                      {uniqueGroups.length || numberOfGroups} Tables Active ({currentMatchEntries.length} Teams)
+                    </Badge>
+                  )}
+                </div>
               </div>
 
-              {groupMode === 'multiple' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Number of Groups</label>
-                    <Input
-                      type="number"
-                      min={2}
-                      max={8}
-                      value={numberOfGroups}
-                      onChange={(e) => setNumberOfGroups(parseInt(e.target.value) || 2)}
-                      className="bg-gray-700 border-gray-600 text-white"
-                    />
+              {/* Quick Select Table Presets & Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="text-xs text-gray-400 font-medium mr-1 flex items-center gap-1">
+                  <Layers className="w-3.5 h-3.5 text-purple-400" /> Presets:
+                </span>
+
+                {/* 1 Table (Unified) Button */}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={groupMode === 'single' ? 'default' : 'outline'}
+                  onClick={handleResetToSingleTable}
+                  className={groupMode === 'single'
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+                    : 'border-gray-600 text-gray-300 hover:bg-gray-800'}
+                >
+                  1 Table (Unified)
+                </Button>
+
+                {/* 2, 3, 4 Tables Presets */}
+                {[2, 3, 4].map(num => (
+                  <Button
+                    key={num}
+                    type="button"
+                    size="sm"
+                    variant={groupMode === 'multiple' && (uniqueGroups.length === num || numberOfGroups === num) ? 'default' : 'outline'}
+                    onClick={() => {
+                      setDistributionTargetCount(num);
+                      setShowDistributionDialog(true);
+                    }}
+                    className={groupMode === 'multiple' && (uniqueGroups.length === num || numberOfGroups === num)
+                      ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-sm'
+                      : 'border-gray-600 text-gray-300 hover:bg-gray-800'}
+                  >
+                    {num} Tables
+                  </Button>
+                ))}
+
+                <div className="h-5 w-px bg-gray-700 mx-1 hidden sm:block" />
+
+                {/* Split / Distribute Teams modal trigger */}
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setShowDistributionDialog(true)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 shadow-sm"
+                >
+                  <Split className="w-3.5 h-3.5" />
+                  Divide / Distribute Teams
+                </Button>
+
+                {/* Manual Table Assignment */}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openManualAssignmentModal()}
+                  className="border-gray-600 text-gray-300 hover:bg-gray-800 flex items-center gap-1.5"
+                >
+                  <Settings2 className="w-3.5 h-3.5" />
+                  Manual Assignment
+                </Button>
+              </div>
+
+              {/* Status / Breakdown row */}
+              {currentMatchEntries.length > 0 && groupMode === 'multiple' && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-gray-400 bg-gray-800/60 px-3 py-2 rounded-lg border border-gray-700/50">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                    <span>
+                      {uniqueGroups.length > 0
+                        ? uniqueGroups.map(g => `Table ${g}: ${currentMatchEntries.filter(e => e.group_name === g).length} teams`).join(' • ')
+                        : `${numberOfGroups} tables configured`}
+                      {unassignedEntries.length > 0 && ` • ⚠️ ${unassignedEntries.length} unassigned`}
+                    </span>
                   </div>
-                  <div className="flex items-end">
+                  {unassignedEntries.length > 0 && (
                     <Button
-                      onClick={handleDistributeTeams}
-                      className="bg-blue-500 hover:bg-blue-600 w-full"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleAutoDistributeTeams(numberOfGroups)}
+                      className="text-xs text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10 h-6 px-2 self-start sm:self-auto"
                     >
-                      <Shuffle className="w-4 h-4 mr-2" />
-                      Auto Distribute Teams
+                      Auto-distribute all {currentMatchEntries.length} teams
                     </Button>
-                  </div>
-                </>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -918,15 +1216,25 @@ const PointsTableAdmin = () => {
       {/* Points Table for Current Match */}
       {selectedTournament && currentMatchEntries.length > 0 && (
         <Card className="bg-gray-800 border-gray-700">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-white flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              Match {selectedMatch} Points ({currentMatchEntries.length} Teams)
-            </CardTitle>
-            <div className="flex items-center gap-2">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-700/60">
+            <div>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Users className="w-5 h-5 text-purple-400" />
+                Match {selectedMatch} Points Table
+                <Badge variant="secondary" className="bg-purple-500/20 text-purple-300 ml-2">
+                  {currentMatchEntries.length} Teams
+                </Badge>
+              </CardTitle>
+              <p className="text-xs text-gray-400 mt-1">
+                Edit scores inline (auto-saved), or reassign teams between tables using the table dropdowns.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Save status */}
               {tableSaveStatus === 'saving' && (
                 <span className="text-xs text-gray-400 animate-pulse flex items-center gap-1">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" /> Saving...
                 </span>
               )}
               {tableSaveStatus === 'saved' && (
@@ -934,107 +1242,509 @@ const PointsTableAdmin = () => {
                   <Check className="w-3.5 h-3.5" /> Saved
                 </span>
               )}
+
+              {/* View mode toggle for multiple groups */}
+              {groupMode === 'multiple' && (
+                <div className="flex items-center bg-gray-900/80 p-1 rounded-lg border border-gray-700">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={tableViewMode === 'split' ? 'default' : 'ghost'}
+                    onClick={() => setTableViewMode('split')}
+                    className={`h-7 px-2.5 text-xs ${
+                      tableViewMode === 'split'
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5 mr-1.5" />
+                    Separate Cards
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={tableViewMode === 'consolidated' ? 'default' : 'ghost'}
+                    onClick={() => setTableViewMode('consolidated')}
+                    className={`h-7 px-2.5 text-xs ${
+                      tableViewMode === 'consolidated'
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <ListFilter className="w-3.5 h-3.5 mr-1.5" />
+                    Consolidated
+                  </Button>
+                </div>
+              )}
             </div>
           </CardHeader>
-          <CardContent>
-            {groupMode === 'multiple' && uniqueGroups.length > 0 ? (
+
+          <CardContent className="space-y-6 pt-5">
+            {/* Filter Tabs if multiple groups */}
+            {groupMode === 'multiple' && (
+              <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-gray-700/40">
+                <span className="text-xs text-gray-400 font-medium mr-1 flex items-center gap-1">
+                  <Filter className="w-3.5 h-3.5 text-gray-400" /> Filter Table:
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={activeTableFilter === 'all' ? 'default' : 'outline'}
+                  onClick={() => setActiveTableFilter('all')}
+                  className={`h-7 text-xs ${
+                    activeTableFilter === 'all'
+                      ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                      : 'border-gray-600 text-gray-300 hover:bg-gray-700'
+                  }`}
+                >
+                  All Tables ({currentMatchEntries.length})
+                </Button>
+                {availableGroups.map(group => {
+                  const count = currentMatchEntries.filter(e => e.group_name === group).length;
+                  return (
+                    <Button
+                      key={group}
+                      type="button"
+                      size="sm"
+                      variant={activeTableFilter === group ? 'default' : 'outline'}
+                      onClick={() => setActiveTableFilter(group)}
+                      className={`h-7 text-xs ${
+                        activeTableFilter === group
+                          ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                          : 'border-gray-600 text-gray-300 hover:bg-gray-700'
+                      }`}
+                    >
+                      Table {group} ({count})
+                    </Button>
+                  );
+                })}
+                {unassignedEntries.length > 0 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={activeTableFilter === 'unassigned' ? 'default' : 'outline'}
+                    onClick={() => setActiveTableFilter('unassigned')}
+                    className={`h-7 text-xs ${
+                      activeTableFilter === 'unassigned'
+                        ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                        : 'border-yellow-600/60 text-yellow-400 hover:bg-yellow-950/40'
+                    }`}
+                  >
+                    ⚠️ Unassigned ({unassignedEntries.length})
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Unassigned Warning Banner (if multiple groups & unassigned exist & not filtered out) */}
+            {groupMode === 'multiple' && unassignedEntries.length > 0 && activeTableFilter === 'all' && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-yellow-950/20 border border-yellow-600/40">
+                <div className="flex items-center gap-2.5">
+                  <AlertCircle className="w-5 h-5 text-yellow-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-yellow-300">
+                      {unassignedEntries.length} team{unassignedEntries.length > 1 ? 's are' : ' is'} not assigned to any table
+                    </p>
+                    <p className="text-xs text-yellow-400/80">
+                      You can auto-distribute them equally across tables or assign them manually.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => handleAutoDistributeTeams(numberOfGroups)}
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white text-xs h-8"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 mr-1" />
+                    Distribute All
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openManualAssignmentModal()}
+                    className="border-yellow-600/60 text-yellow-300 hover:bg-yellow-950/40 text-xs h-8"
+                  >
+                    Assign Manually
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Render Multiple Groups: Separate Cards View */}
+            {groupMode === 'multiple' && tableViewMode === 'split' ? (
               <div className="space-y-6">
-                {uniqueGroups.map(group => (
-                  <div key={group as string} className="space-y-2">
-                    <h3 className="text-lg font-semibold text-purple-400">Group {group}</h3>
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-gray-700">
-                          <TableHead className="text-gray-300">#</TableHead>
-                          <TableHead className="text-gray-300">Team Name</TableHead>
-                          <TableHead className="text-gray-300">Points</TableHead>
-                          <TableHead className="text-gray-300">Kills</TableHead>
-                          <TableHead className="text-gray-300">Wins</TableHead>
-                          <TableHead className="text-gray-300">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {currentMatchEntries
-                          .filter(e => e.group_name === group)
-                          .sort((a, b) => (a.position_in_group || 0) - (b.position_in_group || 0))
-                          .map((entry) => (
-                            <TableRow key={entry.id} className="border-gray-700">
-                              <TableCell className="text-white font-bold">{entry.position_in_group}</TableCell>
+                {availableGroups
+                  .filter(group => activeTableFilter === 'all' || activeTableFilter === group)
+                  .map(group => {
+                    const groupEntries = currentMatchEntries
+                      .filter(e => e.group_name === group)
+                      .sort((a, b) => (a.position_in_group || 0) - (b.position_in_group || 0));
+                    const totalPoints = groupEntries.reduce((sum, e) => sum + (e.points || 0), 0);
+                    const totalKills = groupEntries.reduce((sum, e) => sum + (e.kills || 0), 0);
+
+                    return (
+                      <Card key={group} className="bg-gray-900/60 border-purple-900/50 shadow-md">
+                        <CardHeader className="py-3 px-4 bg-gray-900/90 border-b border-gray-700/60 flex flex-row items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <span className="h-6 w-6 rounded bg-purple-600/20 border border-purple-500/40 text-purple-300 font-bold text-xs flex items-center justify-center">
+                              {group}
+                            </span>
+                            <h3 className="text-base font-semibold text-white">Table {group}</h3>
+                            <Badge variant="outline" className="border-purple-500/40 text-purple-300 bg-purple-500/10 text-xs">
+                              {groupEntries.length} Teams
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-gray-400 flex items-center gap-3">
+                            <span>Points: <strong className="text-purple-300">{totalPoints}</strong></span>
+                            <span>Kills: <strong className="text-red-400">{totalKills}</strong></span>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                          {groupEntries.length === 0 ? (
+                            <div className="py-6 text-center text-xs text-gray-500">
+                              No teams assigned to Table {group} yet.
+                            </div>
+                          ) : (
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="border-gray-800 hover:bg-transparent">
+                                  <TableHead className="text-gray-400 w-12 text-center text-xs">#</TableHead>
+                                  <TableHead className="text-gray-400 text-xs">Team Name</TableHead>
+                                  <TableHead className="text-gray-400 text-xs w-24">Points</TableHead>
+                                  <TableHead className="text-gray-400 text-xs w-24">Kills</TableHead>
+                                  <TableHead className="text-gray-400 text-xs w-24">Wins</TableHead>
+                                  <TableHead className="text-gray-400 text-xs w-32">Move Table</TableHead>
+                                  <TableHead className="text-gray-400 text-xs w-16 text-right">Delete</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {groupEntries.map((entry) => (
+                                  <TableRow key={entry.id} className="border-gray-800/80 hover:bg-gray-800/40">
+                                    <TableCell className="text-purple-300 font-bold text-center text-sm">
+                                      #{entry.position_in_group || entry.position}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Input
+                                        value={entry.team_name}
+                                        onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)}
+                                        className="bg-gray-800/80 border-gray-700 text-white h-8 text-sm focus:border-purple-500"
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Input
+                                        type="number"
+                                        value={entry.points}
+                                        onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)}
+                                        className="bg-gray-800/80 border-gray-700 text-white h-8 text-sm w-20 text-center focus:border-purple-500"
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Input
+                                        type="number"
+                                        value={entry.kills}
+                                        onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)}
+                                        className="bg-gray-800/80 border-gray-700 text-white h-8 text-sm w-20 text-center focus:border-purple-500"
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Input
+                                        type="number"
+                                        value={entry.wins}
+                                        onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)}
+                                        className="bg-gray-800/80 border-gray-700 text-white h-8 text-sm w-20 text-center focus:border-purple-500"
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Select
+                                        value={entry.group_name || 'none'}
+                                        onValueChange={(v) => handleMoveTeamToGroup(entry.id!, v === 'none' ? null : v)}
+                                      >
+                                        <SelectTrigger className="bg-gray-800/80 border-gray-700 text-gray-200 h-8 text-xs w-28">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-gray-800 border-gray-700">
+                                          {availableGroups.map(g => (
+                                            <SelectItem key={g} value={g} className="text-xs">
+                                              Table {g}
+                                            </SelectItem>
+                                          ))}
+                                          <SelectItem value="none" className="text-xs text-yellow-400">
+                                            Unassigned
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleDeleteEntry(entry.id!)}
+                                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 w-8 p-0"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+
+                {/* Unassigned Teams Card (in split mode) */}
+                {unassignedEntries.length > 0 && (activeTableFilter === 'all' || activeTableFilter === 'unassigned') && (
+                  <Card className="bg-gray-900/60 border-yellow-800/50 shadow-md">
+                    <CardHeader className="py-3 px-4 bg-yellow-950/30 border-b border-yellow-700/40 flex flex-row items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <AlertCircle className="w-4 h-4 text-yellow-400" />
+                        <h3 className="text-base font-semibold text-yellow-300">Unassigned Teams</h3>
+                        <Badge variant="outline" className="border-yellow-500/40 text-yellow-300 bg-yellow-500/10 text-xs">
+                          {unassignedEntries.length} Teams
+                        </Badge>
+                      </div>
+                      <span className="text-xs text-yellow-400/80">Assign them to a table using the dropdown</span>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-gray-800 hover:bg-transparent">
+                            <TableHead className="text-gray-400 text-xs">Team Name</TableHead>
+                            <TableHead className="text-gray-400 text-xs w-24">Points</TableHead>
+                            <TableHead className="text-gray-400 text-xs w-24">Kills</TableHead>
+                            <TableHead className="text-gray-400 text-xs w-24">Wins</TableHead>
+                            <TableHead className="text-gray-400 text-xs w-36">Assign to Table</TableHead>
+                            <TableHead className="text-gray-400 text-xs w-16 text-right">Delete</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {unassignedEntries.map((entry) => (
+                            <TableRow key={entry.id} className="border-gray-800/80 hover:bg-gray-800/40">
                               <TableCell>
-                                <Input value={entry.team_name} onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)} className="bg-gray-700 border-gray-600 text-white" />
+                                <Input
+                                  value={entry.team_name}
+                                  onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)}
+                                  className="bg-gray-800/80 border-gray-700 text-white h-8 text-sm"
+                                />
                               </TableCell>
                               <TableCell>
-                                <Input type="number" value={entry.points} onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)} className="bg-gray-700 border-gray-600 text-white w-20" />
+                                <Input
+                                  type="number"
+                                  value={entry.points}
+                                  onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)}
+                                  className="bg-gray-800/80 border-gray-700 text-white h-8 text-sm w-20 text-center"
+                                />
                               </TableCell>
                               <TableCell>
-                                <Input type="number" value={entry.kills} onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)} className="bg-gray-700 border-gray-600 text-white w-20" />
+                                <Input
+                                  type="number"
+                                  value={entry.kills}
+                                  onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)}
+                                  className="bg-gray-800/80 border-gray-700 text-white h-8 text-sm w-20 text-center"
+                                />
                               </TableCell>
                               <TableCell>
-                                <Input type="number" value={entry.wins} onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)} className="bg-gray-700 border-gray-600 text-white w-20" />
+                                <Input
+                                  type="number"
+                                  value={entry.wins}
+                                  onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)}
+                                  className="bg-gray-800/80 border-gray-700 text-white h-8 text-sm w-20 text-center"
+                                />
                               </TableCell>
                               <TableCell>
-                                <div className="flex gap-2">
-                                  <Button size="sm" onClick={() => handleDeleteEntry(entry.id!)} className="bg-red-500 hover:bg-red-600">
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                  {groupMode === 'multiple' && (
-                                    <Select value={entry.group_name || 'A'} onValueChange={(v) => handleInlineEdit(entry.id!, 'group_name', v)}>
-                                      <SelectTrigger className="bg-gray-700 border-gray-600 text-white w-24"><SelectValue /></SelectTrigger>
-                                      <SelectContent className="bg-gray-700 border-gray-600">
-                                        {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].slice(0, numberOfGroups).map(g => (
-                                          <SelectItem key={g} value={g}>Group {g}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  )}
-                                </div>
+                                <Select
+                                  value={entry.group_name || 'none'}
+                                  onValueChange={(v) => handleMoveTeamToGroup(entry.id!, v === 'none' ? null : v)}
+                                >
+                                  <SelectTrigger className="bg-gray-800/80 border-yellow-600/50 text-yellow-300 h-8 text-xs w-32">
+                                    <SelectValue placeholder="Assign..." />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-gray-800 border-gray-700">
+                                    {availableGroups.map(g => (
+                                      <SelectItem key={g} value={g} className="text-xs">
+                                        Assign to Table {g}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDeleteEntry(entry.id!)}
+                                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 w-8 p-0"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
                               </TableCell>
                             </TableRow>
                           ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            ) : groupMode === 'multiple' && tableViewMode === 'consolidated' ? (
+              /* Render Multiple Groups: Consolidated View */
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-700">
+                      <TableHead className="text-gray-300 w-12">#</TableHead>
+                      <TableHead className="text-gray-300 w-32">Table / Group</TableHead>
+                      <TableHead className="text-gray-300">Team Name</TableHead>
+                      <TableHead className="text-gray-300 w-24">Points</TableHead>
+                      <TableHead className="text-gray-300 w-24">Kills</TableHead>
+                      <TableHead className="text-gray-300 w-24">Wins</TableHead>
+                      <TableHead className="text-gray-300 w-16 text-right">Delete</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {currentMatchEntries
+                      .filter(e => activeTableFilter === 'all' || (activeTableFilter === 'unassigned' ? !e.group_name : e.group_name === activeTableFilter))
+                      .sort((a, b) => (b.points || 0) - (a.points || 0) || (b.kills || 0) - (a.kills || 0))
+                      .map((entry, idx) => (
+                        <TableRow key={entry.id} className="border-gray-700 hover:bg-gray-700/30">
+                          <TableCell className="text-white font-bold">#{idx + 1}</TableCell>
+                          <TableCell>
+                            <Select
+                              value={entry.group_name || 'none'}
+                              onValueChange={(v) => handleMoveTeamToGroup(entry.id!, v === 'none' ? null : v)}
+                            >
+                              <SelectTrigger className="bg-gray-700 border-gray-600 text-white h-8 text-xs w-28">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="bg-gray-700 border-gray-600">
+                                {availableGroups.map(g => (
+                                  <SelectItem key={g} value={g} className="text-xs">
+                                    Table {g}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="none" className="text-xs text-yellow-400">
+                                  Unassigned
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={entry.team_name}
+                              onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)}
+                              className="bg-gray-700 border-gray-600 text-white h-8 text-sm"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={entry.points}
+                              onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)}
+                              className="bg-gray-700 border-gray-600 text-white h-8 text-sm w-20 text-center"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={entry.kills}
+                              onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)}
+                              className="bg-gray-700 border-gray-600 text-white h-8 text-sm w-20 text-center"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={entry.wins}
+                              onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)}
+                              className="bg-gray-700 border-gray-600 text-white h-8 text-sm w-20 text-center"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeleteEntry(entry.id!)}
+                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 w-8 p-0"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-gray-700">
-                    <TableHead className="text-gray-300">Position</TableHead>
-                    <TableHead className="text-gray-300">Team Name</TableHead>
-                    <TableHead className="text-gray-300">Points</TableHead>
-                    <TableHead className="text-gray-300">Kills</TableHead>
-                    <TableHead className="text-gray-300">Wins</TableHead>
-                    <TableHead className="text-gray-300">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {currentMatchEntries
-                    .sort((a, b) => a.position - b.position)
-                    .map((entry) => (
-                      <TableRow key={entry.id} className="border-gray-700">
-                        <TableCell className="text-white font-bold">#{entry.position}</TableCell>
-                        <TableCell>
-                          <Input value={entry.team_name} onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)} className="bg-gray-700 border-gray-600 text-white" />
-                        </TableCell>
-                        <TableCell>
-                          <Input type="number" value={entry.points} onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)} className="bg-gray-700 border-gray-600 text-white w-20" />
-                        </TableCell>
-                        <TableCell>
-                          <Input type="number" value={entry.kills} onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)} className="bg-gray-700 border-gray-600 text-white w-20" />
-                        </TableCell>
-                        <TableCell>
-                          <Input type="number" value={entry.wins} onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)} className="bg-gray-700 border-gray-600 text-white w-20" />
-                        </TableCell>
-                        <TableCell>
-                          <Button size="sm" onClick={() => handleDeleteEntry(entry.id!)} className="bg-red-500 hover:bg-red-600">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
+              /* Single Unified Table View */
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-700">
+                      <TableHead className="text-gray-300 w-16">Position</TableHead>
+                      <TableHead className="text-gray-300">Team Name</TableHead>
+                      <TableHead className="text-gray-300 w-24">Points</TableHead>
+                      <TableHead className="text-gray-300 w-24">Kills</TableHead>
+                      <TableHead className="text-gray-300 w-24">Wins</TableHead>
+                      <TableHead className="text-gray-300 w-16 text-right">Delete</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {currentMatchEntries
+                      .sort((a, b) => a.position - b.position)
+                      .map((entry) => (
+                        <TableRow key={entry.id} className="border-gray-700 hover:bg-gray-700/30">
+                          <TableCell className="text-white font-bold">#{entry.position}</TableCell>
+                          <TableCell>
+                            <Input
+                              value={entry.team_name}
+                              onChange={(e) => handleInlineEdit(entry.id!, 'team_name', e.target.value)}
+                              className="bg-gray-700 border-gray-600 text-white h-8 text-sm"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={entry.points}
+                              onChange={(e) => handleInlineEdit(entry.id!, 'points', parseInt(e.target.value) || 0)}
+                              className="bg-gray-700 border-gray-600 text-white h-8 text-sm w-20 text-center"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={entry.kills}
+                              onChange={(e) => handleInlineEdit(entry.id!, 'kills', parseInt(e.target.value) || 0)}
+                              className="bg-gray-700 border-gray-600 text-white h-8 text-sm w-20 text-center"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={entry.wins}
+                              onChange={(e) => handleInlineEdit(entry.id!, 'wins', parseInt(e.target.value) || 0)}
+                              className="bg-gray-700 border-gray-600 text-white h-8 text-sm w-20 text-center"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeleteEntry(entry.id!)}
+                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 w-8 p-0"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -1124,6 +1834,298 @@ const PointsTableAdmin = () => {
             <Button onClick={applyOCRPoints} disabled={loading} className="bg-green-500 hover:bg-green-600">
               {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
               Apply Points
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Distribution Prompt Dialog: Auto vs Manual */}
+      <Dialog open={showDistributionDialog} onOpenChange={setShowDistributionDialog}>
+        <DialogContent className="bg-gray-800 border-gray-700 max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2 text-lg">
+              <Split className="w-5 h-5 text-purple-400" />
+              Divide Teams into Tables / Groups
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-gray-300">
+              Divide <span className="text-white font-bold">{currentMatchEntries.length} teams</span> of Match {selectedMatch} equally into separate tables/pools.
+            </p>
+
+            {/* Number of Tables selector */}
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Select Number of Tables
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[2, 3, 4, 5].map(num => (
+                  <Button
+                    key={num}
+                    type="button"
+                    variant={distributionTargetCount === num ? "default" : "outline"}
+                    onClick={() => setDistributionTargetCount(num)}
+                    className={distributionTargetCount === num
+                      ? "bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-sm"
+                      : "border-gray-600 text-gray-300 hover:bg-gray-700"}
+                  >
+                    {num} Tables
+                  </Button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs text-gray-400">Custom count (2-8):</span>
+                <Input
+                  type="number"
+                  min={2}
+                  max={8}
+                  value={distributionTargetCount}
+                  onChange={(e) => setDistributionTargetCount(Math.max(2, Math.min(8, parseInt(e.target.value) || 2)))}
+                  className="bg-gray-700 border-gray-600 text-white w-20 h-8 text-sm text-center"
+                />
+              </div>
+            </div>
+
+            {/* Distribution Calculation Preview */}
+            <div className="bg-gray-900/80 p-3.5 rounded-lg border border-purple-500/30 space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-semibold text-purple-300">
+                <span>Equal Distribution Preview</span>
+                <span>{currentMatchEntries.length} Total Teams</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {Array.from({ length: distributionTargetCount }, (_, i) => {
+                  const groupLetter = String.fromCharCode(65 + i);
+                  const base = Math.floor(currentMatchEntries.length / distributionTargetCount);
+                  const remainder = currentMatchEntries.length % distributionTargetCount;
+                  const size = i < remainder ? base + 1 : base;
+                  return (
+                    <div key={groupLetter} className="flex items-center justify-between bg-gray-800/90 px-3 py-2 rounded border border-gray-700/80">
+                      <span className="text-gray-200 font-medium">Table {groupLetter}</span>
+                      <Badge variant="secondary" className="bg-purple-500/20 text-purple-300 text-xs font-semibold">
+                        {size} teams
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+              {currentMatchEntries.length > 0 && currentMatchEntries.length % distributionTargetCount !== 0 && (
+                <p className="text-[11px] text-gray-400 pt-0.5">
+                  ⚡ Uneven teams ({currentMatchEntries.length % distributionTargetCount} extra) are placed into the first tables automatically.
+                </p>
+              )}
+            </div>
+
+            {/* Method Selection: Auto vs Manual */}
+            <div className="space-y-2 pt-1">
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Distribution Method
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div
+                  onClick={() => setDistributionChoice('auto')}
+                  className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                    distributionChoice === 'auto'
+                      ? 'border-purple-500 bg-purple-950/40 text-white ring-1 ring-purple-500'
+                      : 'border-gray-700 bg-gray-900/40 text-gray-400 hover:border-gray-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-medium text-sm text-white mb-1">
+                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    Auto Distribute
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Evenly distributes all teams across {distributionTargetCount} tables instantly.
+                  </p>
+                </div>
+
+                <div
+                  onClick={() => setDistributionChoice('manual')}
+                  className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                    distributionChoice === 'manual'
+                      ? 'border-purple-500 bg-purple-950/40 text-white ring-1 ring-purple-500'
+                      : 'border-gray-700 bg-gray-900/40 text-gray-400 hover:border-gray-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-medium text-sm text-white mb-1">
+                    <Settings2 className="w-4 h-4 text-blue-400" />
+                    Manual Assignment
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Hand-pick which table each team is assigned to.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 pt-2 border-t border-gray-700">
+            <Button variant="outline" onClick={() => setShowDistributionDialog(false)} className="border-gray-600 text-gray-300">
+              Cancel
+            </Button>
+            {distributionChoice === 'auto' ? (
+              <Button
+                onClick={() => handleAutoDistributeTeams(distributionTargetCount)}
+                disabled={loading || currentMatchEntries.length === 0}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-semibold"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                Auto Distribute Equally
+              </Button>
+            ) : (
+              <Button
+                onClick={() => openManualAssignmentModal(distributionTargetCount)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+              >
+                <Settings2 className="w-4 h-4 mr-2" />
+                Open Manual Assignment
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Team Assignment Dialog */}
+      <Dialog open={showManualAssignDialog} onOpenChange={setShowManualAssignDialog}>
+        <DialogContent className="bg-gray-800 border-gray-700 max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2 text-lg">
+              <Settings2 className="w-5 h-5 text-blue-400" />
+              Manual Team Table Assignment ({currentMatchEntries.length} Teams)
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 flex-1 overflow-y-auto pr-1">
+            {/* Table count selector & helper buttons */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-gray-900/80 rounded-lg border border-gray-700/60">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-300 font-medium">Tables:</span>
+                {[2, 3, 4, 5].map(num => (
+                  <Button
+                    key={num}
+                    type="button"
+                    size="sm"
+                    variant={distributionTargetCount === num ? "default" : "outline"}
+                    onClick={() => setDistributionTargetCount(num)}
+                    className={`h-7 px-2.5 text-xs ${
+                      distributionTargetCount === num
+                        ? "bg-purple-600 text-white font-semibold"
+                        : "border-gray-700 text-gray-300 hover:bg-gray-800"
+                    }`}
+                  >
+                    {num}
+                  </Button>
+                ))}
+              </div>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const groups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].slice(0, distributionTargetCount);
+                  const total = currentMatchEntries.length;
+                  const base = Math.floor(total / distributionTargetCount);
+                  const remainder = total % distributionTargetCount;
+                  const newMap: Record<string, string> = {};
+                  let currentIndex = 0;
+                  for (let i = 0; i < distributionTargetCount; i++) {
+                    const groupLetter = groups[i];
+                    const groupSize = i < remainder ? base + 1 : base;
+                    const groupSlice = currentMatchEntries.slice(currentIndex, currentIndex + groupSize);
+                    groupSlice.forEach((entry) => {
+                      newMap[entry.id || entry.team_name] = groupLetter;
+                    });
+                    currentIndex += groupSize;
+                  }
+                  setTempManualAssignments(newMap);
+                }}
+                className="border-purple-500/40 text-purple-300 hover:bg-purple-950/40 text-xs h-7 self-start sm:self-auto"
+              >
+                <Shuffle className="w-3 h-3 mr-1" />
+                Fill Evenly First
+              </Button>
+            </div>
+
+            {/* Live table count pills */}
+            <div className="flex flex-wrap gap-2">
+              {Array.from({ length: distributionTargetCount }, (_, i) => {
+                const letter = String.fromCharCode(65 + i);
+                const count = currentMatchEntries.filter(e => (tempManualAssignments[e.id || e.team_name] || e.group_name) === letter).length;
+                return (
+                  <Badge key={letter} variant="outline" className="bg-purple-950/40 border-purple-600/50 text-purple-300 px-2.5 py-1 text-xs">
+                    Table {letter}: <strong className="ml-1 text-white">{count}</strong>
+                  </Badge>
+                );
+              })}
+            </div>
+
+            {/* Search filter */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <Input
+                placeholder="Search team name..."
+                value={manualSearchQuery}
+                onChange={(e) => setManualSearchQuery(e.target.value)}
+                className="bg-gray-700 border-gray-600 text-white text-sm pl-9 h-9"
+              />
+            </div>
+
+            {/* Team assignment rows */}
+            <div className="space-y-2">
+              {currentMatchEntries
+                .filter(e => !manualSearchQuery || e.team_name.toLowerCase().includes(manualSearchQuery.toLowerCase()))
+                .map((entry) => {
+                  const key = entry.id || entry.team_name;
+                  const currentSelectedGroup = tempManualAssignments[key] || entry.group_name || 'A';
+                  return (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between p-2.5 bg-gray-700/40 hover:bg-gray-700/60 rounded-lg border border-gray-600/40 gap-2"
+                    >
+                      <span className="text-white font-medium text-sm truncate max-w-[220px]">
+                        {entry.team_name}
+                      </span>
+
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                        {Array.from({ length: distributionTargetCount }, (_, i) => {
+                          const letter = String.fromCharCode(65 + i);
+                          const isSelected = currentSelectedGroup === letter;
+                          return (
+                            <Button
+                              key={letter}
+                              type="button"
+                              size="sm"
+                              variant={isSelected ? "default" : "outline"}
+                              onClick={() => setTempManualAssignments(prev => ({ ...prev, [key]: letter }))}
+                              className={`h-7 px-2.5 text-xs ${
+                                isSelected
+                                  ? "bg-purple-600 hover:bg-purple-700 text-white font-semibold"
+                                  : "border-gray-600 text-gray-300 hover:bg-gray-700"
+                              }`}
+                            >
+                              Table {letter}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 pt-3 border-t border-gray-700">
+            <Button variant="outline" onClick={() => setShowManualAssignDialog(false)} className="border-gray-600 text-gray-300">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveManualAssignments}
+              disabled={loading}
+              className="bg-green-600 hover:bg-green-700 text-white font-semibold"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+              Save Table Assignments
             </Button>
           </DialogFooter>
         </DialogContent>

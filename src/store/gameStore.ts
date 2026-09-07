@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '@/integrations/supabase/client';
 import { Tournament, Player, Match, WalletTransaction } from '../types';
-import { tournamentService, playerService, matchService } from '@/services/supabaseService';
+import { tournamentService, playerService, matchService, convertToTournament } from '@/services/supabaseService';
 
 interface GameStore {
   tournaments: Tournament[];
@@ -212,9 +212,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setError: (error) => set({ error }),
   
   initialize: async () => {
-    // Prevent re-initialization if data already loaded
+    // Prevent duplicate loading spinner if data already loaded, but refresh tournaments in background
     const state = get();
-    if (state.tournaments.length > 0 && !state.error) return;
+    if (state.tournaments.length > 0 && !state.error) {
+      tournamentService.getAll().then((freshTournaments) => {
+        if (freshTournaments && freshTournaments.length > 0) {
+          set({ tournaments: freshTournaments });
+        }
+      }).catch(console.error);
+      return;
+    }
     
     try {
       set({ isLoading: true, error: null });
@@ -243,19 +250,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, (payload) => {
           console.log('Tournament change:', payload);
           const { eventType, new: newRecord, old: oldRecord } = payload;
+          const mapped = newRecord ? convertToTournament(newRecord) : null;
           
           set((state) => {
             let newTournaments = [...state.tournaments];
             
             switch (eventType) {
               case 'INSERT':
-                newTournaments.push(newRecord as Tournament);
+                if (mapped) newTournaments.push(mapped);
                 break;
               case 'UPDATE':
-                newTournaments = newTournaments.map(t => t.id === newRecord.id ? newRecord as Tournament : t);
+                if (mapped) {
+                  newTournaments = newTournaments.map(t => t.id === mapped.id ? mapped : t);
+                }
                 break;
               case 'DELETE':
-                newTournaments = newTournaments.filter(t => t.id !== oldRecord.id);
+                if (oldRecord) {
+                  newTournaments = newTournaments.filter(t => t.id !== oldRecord.id);
+                }
                 break;
             }
             

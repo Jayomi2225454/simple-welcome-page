@@ -163,10 +163,12 @@ const Index = () => {
               <Card className="bg-gray-800/50 border-gray-700 hover:border-purple-500/50 transition-all duration-300 group overflow-hidden cursor-pointer">
                 {/* Tournament Banner */}
                 <div className="relative aspect-video overflow-hidden">
-                  {tournament.banner ? (
+                  {(tournament.banner || (tournament as any).banner_url || tournament.image || (tournament as any).image_url) ? (
                     <img 
-                      src={tournament.banner} 
+                      key={tournament.banner || (tournament as any).banner_url || tournament.image || (tournament as any).image_url}
+                      src={tournament.banner || (tournament as any).banner_url || tournament.image || (tournament as any).image_url} 
                       alt={tournament.name}
+                      loading="eager"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                   ) : (

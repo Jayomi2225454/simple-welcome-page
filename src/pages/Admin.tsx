@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Save, X, Users, Trophy, Play, Image, Loader2, Lock, ShieldX, TableIcon, Ticket, QrCode, ClipboardList, Bot, Settings, MessageCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, Users, Trophy, Play, Image, Loader2, Lock, ShieldX, TableIcon, Ticket, QrCode, ClipboardList, Bot, Settings, MessageCircle, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,7 @@ import BattleCodeAdmin from '@/components/admin/BattleCodeAdmin';
 import TournamentRegistrationsAdmin from '@/components/admin/TournamentRegistrationsAdmin';
 import AISettingsAdmin from '@/components/admin/AISettingsAdmin';
 import SupportChatAdmin from '@/components/admin/SupportChatAdmin';
+import AdminAllDetails from '@/components/admin/AdminAllDetails';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
@@ -32,10 +33,13 @@ import TournamentMatchScoresAdmin from '@/components/admin/TournamentMatchScores
 
 const Admin = () => {
   const { toast } = useToast();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isAdmin: authIsAdmin } = useAuth();
   const navigate = useNavigate();
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(() => {
+    return localStorage.getItem('bm_is_admin') === 'true';
+  });
   const [checkingAdmin, setCheckingAdmin] = useState(true);
+  const [activeTab, setActiveTab] = useState('all-details');
   const {
     tournaments,
     players,
@@ -72,7 +76,7 @@ const Admin = () => {
     end_date: '',
     start_time: '',
     end_time: '',
-    status: 'upcoming' as 'upcoming' | 'ongoing' | 'completed',
+    status: 'upcoming' as 'upcoming' | 'ongoing' | 'completed' | 'closed' | 'full',
     banner: '',
     entry_fee_type: 'free' as 'free' | 'paid',
     entry_fee: '',
@@ -126,6 +130,13 @@ const Admin = () => {
         return;
       }
 
+      // If user is already confirmed as admin from AuthContext or cache, preserve access
+      const cachedAdmin = authIsAdmin || localStorage.getItem(`bm_admin_${user.id}`) === 'true';
+      if (cachedAdmin) {
+        setIsAdmin(true);
+        setCheckingAdmin(false);
+      }
+
       try {
         const { data, error } = await supabase.rpc('has_role', {
           _user_id: user.id,
@@ -133,21 +144,28 @@ const Admin = () => {
         });
 
         if (error) {
-          console.error('Error checking admin role:', error);
-          setIsAdmin(false);
+          console.warn('Error checking admin role, preserving cached state:', error);
+          if (!cachedAdmin) {
+            setIsAdmin(false);
+          }
         } else {
-          setIsAdmin(data === true);
+          const isUserAdmin = data === true;
+          setIsAdmin(isUserAdmin);
+          localStorage.setItem(`bm_admin_${user.id}`, isUserAdmin ? 'true' : 'false');
+          localStorage.setItem('bm_is_admin', isUserAdmin ? 'true' : 'false');
         }
       } catch (err) {
-        console.error('Error checking admin status:', err);
-        setIsAdmin(false);
+        console.warn('Error checking admin status:', err);
+        if (!cachedAdmin) {
+          setIsAdmin(false);
+        }
       } finally {
         setCheckingAdmin(false);
       }
     };
 
     checkAdminRole();
-  }, [user, authLoading]);
+  }, [user, authLoading, authIsAdmin]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -243,6 +261,12 @@ const Admin = () => {
         : `₹${tournamentForm.entry_fee}`;
 
       const is1v1 = tournamentForm.team_size === '1v1';
+      const existingOverview = editingTournament?.overview_content || {};
+      const updatedOverview = {
+        ...(typeof existingOverview === 'object' ? existingOverview : {}),
+        enforce_cap: true,
+      };
+
       const tournamentData = {
         ...tournamentForm,
         max_participants: parseInt(tournamentForm.max_participants),
@@ -260,6 +284,8 @@ const Admin = () => {
         registration_opens: tournamentForm.registration_opens ? new Date(tournamentForm.registration_opens).toISOString() : undefined,
         registration_closes: tournamentForm.registration_closes ? new Date(tournamentForm.registration_closes).toISOString() : undefined,
         winners: tournamentForm.winners || undefined,
+        enforce_cap: true,
+        overview_content: updatedOverview,
       };
       
       // Remove entry_fee_type from data sent to DB
@@ -380,7 +406,7 @@ const Admin = () => {
       start_time: tournament.start_time || '',
       end_time: tournament.end_time || '',
       status: tournament.status,
-      banner: tournament.banner || '',
+      banner: tournament.banner || (tournament as any).banner_url || tournament.image || (tournament as any).image_url || '',
       entry_fee_type: isFree ? 'free' : 'paid',
       entry_fee: isFree ? '' : entryFeeValue.replace(/[^0-9]/g, ''),
       region: tournament.region || '',
@@ -541,8 +567,12 @@ const Admin = () => {
           </p>
         </div>
 
-        <Tabs defaultValue="tournaments" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 lg:grid-cols-14 bg-gray-800 h-auto flex-wrap">
+        <Tabs value={activeTab} onValueChange={setActiveTab} defaultValue="all-details" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4 md:grid-cols-7 lg:grid-cols-13 bg-gray-800 h-auto flex-wrap">
+            <TabsTrigger value="all-details" className="data-[state=active]:bg-purple-600 font-semibold text-white">
+              <BarChart3 className="w-4 h-4 mr-2 text-purple-400" />
+              All Details
+            </TabsTrigger>
             <TabsTrigger value="tournaments" className="data-[state=active]:bg-purple-500">
               <Trophy className="w-4 h-4 mr-2" />
               Tournaments
@@ -550,14 +580,6 @@ const Admin = () => {
             <TabsTrigger value="registrations" className="data-[state=active]:bg-purple-500">
               <ClipboardList className="w-4 h-4 mr-2" />
               Registrations
-            </TabsTrigger>
-            <TabsTrigger value="players" className="data-[state=active]:bg-purple-500">
-              <Users className="w-4 h-4 mr-2" />
-              Players
-            </TabsTrigger>
-            <TabsTrigger value="matches" className="data-[state=active]:bg-purple-500">
-              <Play className="w-4 h-4 mr-2" />
-              Matches
             </TabsTrigger>
             <TabsTrigger value="points" className="data-[state=active]:bg-purple-500">
               <TableIcon className="w-4 h-4 mr-2" />
@@ -604,6 +626,11 @@ const Admin = () => {
               Support
             </TabsTrigger>
           </TabsList>
+
+          {/* All Details Tab */}
+          <TabsContent value="all-details" className="space-y-6">
+            <AdminAllDetails onNavigateTab={(tab) => setActiveTab(tab)} />
+          </TabsContent>
 
           {/* Registrations Tab */}
           <TabsContent value="registrations" className="space-y-6">
@@ -712,6 +739,7 @@ const Admin = () => {
                         <SelectContent className="bg-gray-700 border-gray-600">
                           <SelectItem value="upcoming">Upcoming</SelectItem>
                           <SelectItem value="ongoing">Ongoing</SelectItem>
+                          <SelectItem value="closed">Closed / Full</SelectItem>
                           <SelectItem value="completed">Completed</SelectItem>
                         </SelectContent>
                       </Select>
@@ -941,10 +969,12 @@ const Admin = () => {
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="flex items-center gap-4 mb-4">
-                          {tournament.banner && (
+                          {(tournament.banner || (tournament as any).banner_url || tournament.image || (tournament as any).image_url) && (
                             <img 
-                              src={tournament.banner} 
+                              key={tournament.banner || (tournament as any).banner_url || tournament.image || (tournament as any).image_url}
+                              src={tournament.banner || (tournament as any).banner_url || tournament.image || (tournament as any).image_url} 
                               alt={tournament.name}
+                              loading="eager"
                               className="w-24 h-16 object-cover rounded border border-gray-600"
                             />
                           )}
@@ -1003,408 +1033,6 @@ const Admin = () => {
                         gameName={tournament.game}
                       />
                     )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          {/* Players Tab */}
-          <TabsContent value="players" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-white">Manage Players</h2>
-              <Button 
-                onClick={() => setShowAddPlayer(true)}
-                className="bg-purple-500 hover:bg-purple-600"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Player
-              </Button>
-            </div>
-
-            {(showAddPlayer || editingPlayer) && (
-              <Card className="bg-gray-800 border-gray-700">
-                <CardHeader>
-                  <CardTitle className="text-white">
-                    {editingPlayer ? 'Edit Player' : 'Add New Player'}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Player Name
-                      </label>
-                      <Input
-                        value={playerForm.name}
-                        onChange={(e) => setPlayerForm({...playerForm, name: e.target.value})}
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Team
-                      </label>
-                      <Input
-                        value={playerForm.team}
-                        onChange={(e) => setPlayerForm({...playerForm, team: e.target.value})}
-                        placeholder="e.g., Team Liquid"
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Country
-                      </label>
-                      <Input
-                        value={playerForm.country}
-                        onChange={(e) => setPlayerForm({...playerForm, country: e.target.value})}
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Earnings ($)
-                      </label>
-                      <Input
-                        type="number"
-                        value={playerForm.earnings}
-                        onChange={(e) => setPlayerForm({...playerForm, earnings: e.target.value})}
-                        placeholder="Total earnings in dollars"
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="grid md:grid-cols-4 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Points
-                      </label>
-                      <Input
-                        type="number"
-                        value={playerForm.points}
-                        onChange={(e) => setPlayerForm({...playerForm, points: e.target.value})}
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Wins
-                      </label>
-                      <Input
-                        type="number"
-                        value={playerForm.wins}
-                        onChange={(e) => setPlayerForm({...playerForm, wins: e.target.value})}
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Losses
-                      </label>
-                      <Input
-                        type="number"
-                        value={playerForm.losses}
-                        onChange={(e) => setPlayerForm({...playerForm, losses: e.target.value})}
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Win Rate (%)
-                      </label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        value={playerForm.win_rate}
-                        onChange={(e) => setPlayerForm({...playerForm, win_rate: e.target.value})}
-                        placeholder="e.g., 75.5"
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Tournaments Won
-                    </label>
-                    <Input
-                      type="number"
-                      value={playerForm.tournaments_won}
-                      onChange={(e) => setPlayerForm({...playerForm, tournaments_won: e.target.value})}
-                      placeholder="Number of tournaments won"
-                      className="bg-gray-700 border-gray-600 text-white"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      <Image className="w-4 h-4 inline mr-2" />
-                      Player Avatar
-                    </label>
-                    <FileUpload
-                      bucket="player-avatars"
-                      onUpload={(url) => setPlayerForm({...playerForm, avatar: url})}
-                      currentUrl={playerForm.avatar}
-                      maxSize={2}
-                    />
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <Button onClick={handleSavePlayer} className="bg-green-500 hover:bg-green-600">
-                      <Save className="w-4 h-4 mr-2" />
-                      Save Player
-                    </Button>
-                    <Button onClick={resetPlayerForm} variant="outline" className="border-gray-600 text-gray-300 hover:bg-gray-800">
-                      <X className="w-4 h-4 mr-2" />
-                      Cancel
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            <div className="grid gap-4">
-              {players.map((player) => (
-                <Card key={player.id} className="bg-gray-800 border-gray-700">
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold">
-                          #{player.rank}
-                        </div>
-                        <div>
-                          <h3 className="text-white font-bold text-lg">{player.name}</h3>
-                          <div className="flex gap-4 text-sm text-gray-400">
-                            <span>Points: {player.points}</span>
-                            <span>W/L: {player.wins}/{player.losses}</span>
-                            <span>Country: {player.country}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          size="sm" 
-                          onClick={() => startEditPlayer(player)}
-                          className="bg-blue-500 hover:bg-blue-600"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          onClick={() => deletePlayer(player.id)}
-                          className="bg-red-500 hover:bg-red-600"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          {/* Matches Tab */}
-          <TabsContent value="matches" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-white">Manage Matches</h2>
-              <Button 
-                onClick={() => setShowAddMatch(true)}
-                className="bg-purple-500 hover:bg-purple-600"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Match
-              </Button>
-            </div>
-
-            {(showAddMatch || editingMatch) && (
-              <Card className="bg-gray-800 border-gray-700">
-                <CardHeader>
-                  <CardTitle className="text-white">
-                    {editingMatch ? 'Edit Match' : 'Add New Match'}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Tournament
-                      </label>
-                      <Select value={matchForm.tournament_id} onValueChange={(value) => setMatchForm({...matchForm, tournament_id: value})}>
-                        <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                          <SelectValue placeholder="Select Tournament" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-700 border-gray-600">
-                          {tournaments.map((tournament) => (
-                            <SelectItem key={tournament.id} value={tournament.id}>
-                              {tournament.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Game
-                      </label>
-                      <Input
-                        value={matchForm.game}
-                        onChange={(e) => setMatchForm({...matchForm, game: e.target.value})}
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Player 1
-                      </label>
-                      <Input
-                        value={matchForm.player1}
-                        onChange={(e) => setMatchForm({...matchForm, player1: e.target.value})}
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Player 2
-                      </label>
-                      <Input
-                        value={matchForm.player2}
-                        onChange={(e) => setMatchForm({...matchForm, player2: e.target.value})}
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="grid md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Player 1 Score
-                      </label>
-                      <Input
-                        type="number"
-                        value={matchForm.player1_score}
-                        onChange={(e) => setMatchForm({...matchForm, player1_score: e.target.value})}
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Player 2 Score
-                      </label>
-                      <Input
-                        type="number"
-                        value={matchForm.player2_score}
-                        onChange={(e) => setMatchForm({...matchForm, player2_score: e.target.value})}
-                        className="bg-gray-700 border-gray-600 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Status
-                      </label>
-                      <Select value={matchForm.status} onValueChange={(value: any) => setMatchForm({...matchForm, status: value})}>
-                        <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-700 border-gray-600">
-                          <SelectItem value="upcoming">Upcoming</SelectItem>
-                          <SelectItem value="live">Live</SelectItem>
-                          <SelectItem value="completed">Completed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Start Time
-                    </label>
-                    <Input
-                      type="datetime-local"
-                      value={matchForm.start_time}
-                      onChange={(e) => setMatchForm({...matchForm, start_time: e.target.value})}
-                      className="bg-gray-700 border-gray-600 text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      <Image className="w-4 h-4 inline mr-2" />
-                      Match Thumbnail
-                    </label>
-                    <FileUpload
-                      bucket="match-thumbnails"
-                      onUpload={(url) => setMatchForm({...matchForm, thumbnail: url})}
-                      currentUrl={matchForm.thumbnail}
-                      maxSize={3}
-                    />
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <Button onClick={handleSaveMatch} className="bg-green-500 hover:bg-green-600">
-                      <Save className="w-4 h-4 mr-2" />
-                      Save Match
-                    </Button>
-                    <Button onClick={resetMatchForm} variant="outline" className="border-gray-600 text-gray-300 hover:bg-gray-800">
-                      <X className="w-4 h-4 mr-2" />
-                      Cancel
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            <div className="grid gap-4">
-              {matches.map((match) => (
-                <Card key={match.id} className="bg-gray-800 border-gray-700">
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center gap-4 mb-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            match.status === 'live' 
-                              ? 'bg-red-500 text-white' 
-                              : match.status === 'upcoming'
-                              ? 'bg-yellow-500 text-black'
-                              : 'bg-green-500 text-white'
-                          }`}>
-                            {match.status.toUpperCase()}
-                          </span>
-                          <span className="text-gray-400 text-sm">{match.game}</span>
-                        </div>
-                        <h3 className="text-white font-bold text-lg mb-2">
-                          {match.player1} vs {match.player2}
-                        </h3>
-                        <div className="flex gap-4 text-sm text-gray-400">
-                          <span>Score: {match.player1_score} - {match.player2_score}</span>
-                          <span>Start: {new Date(match.start_time).toLocaleString()}</span>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          size="sm" 
-                          onClick={() => startEditMatch(match)}
-                          className="bg-blue-500 hover:bg-blue-600"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          onClick={() => deleteMatch(match.id)}
-                          className="bg-red-500 hover:bg-red-600"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
                   </CardContent>
                 </Card>
               ))}

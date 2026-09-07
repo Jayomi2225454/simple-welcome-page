@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Search, MapPin, Calendar, Users, Dumbbell } from 'lucide-react';
+import { Trophy, Search, MapPin, Calendar, Users, Dumbbell, Clock, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Layout from '@/components/layout/Layout';
 import { supabase } from '@/integrations/supabase/client';
+
+type SportsTournamentStatusTab = 'upcoming' | 'live' | 'past';
 
 interface SportsTournament {
   id: string;
@@ -33,9 +35,9 @@ interface SportsTournament {
 const SportsTournaments = () => {
   const [tournaments, setTournaments] = useState<SportsTournament[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statusTab, setStatusTab] = useState<SportsTournamentStatusTab>('upcoming');
   const [searchTerm, setSearchTerm] = useState('');
   const [sportFilter, setSportFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [cityFilter, setCityFilter] = useState('all');
 
   const sportTypes = ['Cricket', 'Football', 'Badminton', 'Basketball', 'Kabaddi', 'Chess', 'Athletics', 'Tennis', 'Volleyball', 'Hockey'];
@@ -60,12 +62,36 @@ const SportsTournaments = () => {
     }
   };
 
+  const isUpcoming = (status?: string | null) => {
+    if (!status) return true;
+    const s = status.toLowerCase();
+    return s === 'upcoming';
+  };
+
+  const isLive = (status?: string | null) => {
+    if (!status) return false;
+    const s = status.toLowerCase();
+    return s === 'ongoing' || s === 'live';
+  };
+
+  const isPast = (status?: string | null) => {
+    if (!status) return false;
+    const s = status.toLowerCase();
+    return s === 'completed' || s === 'past' || s === 'ended' || s === 'finished';
+  };
+
+  const upcomingCount = tournaments.filter(t => isUpcoming(t.status)).length;
+  const liveCount = tournaments.filter(t => isLive(t.status)).length;
+  const pastCount = tournaments.filter(t => isPast(t.status)).length;
+
   const filteredTournaments = tournaments.filter(tournament => {
     const matchesSearch = tournament.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           tournament.sport_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           tournament.city?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesSport = sportFilter === 'all' || tournament.sport_type === sportFilter;
-    const matchesStatus = statusFilter === 'all' || tournament.status === statusFilter;
+    const matchesStatus = statusTab === 'upcoming' ? isUpcoming(tournament.status) :
+                          statusTab === 'live' ? isLive(tournament.status) :
+                          isPast(tournament.status);
     const matchesCity = cityFilter === 'all' || tournament.city === cityFilter;
     
     return matchesSearch && matchesSport && matchesStatus && matchesCity;
@@ -87,8 +113,75 @@ const SportsTournaments = () => {
           </div>
         </div>
 
+        {/* Status Tabs (Upcoming -> Live -> Past) */}
+        <div className="flex justify-center mb-8">
+          <div className="bg-gray-900/90 p-1.5 rounded-2xl border border-gray-700/80 shadow-2xl backdrop-blur-md w-full max-w-2xl">
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+              {/* 1. Upcoming */}
+              <button
+                type="button"
+                onClick={() => setStatusTab('upcoming')}
+                className={`flex items-center justify-center gap-1.5 sm:gap-2.5 py-3 px-2 sm:px-5 rounded-xl font-bold text-xs sm:text-base transition-all duration-300 ${
+                  statusTab === 'upcoming'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-500/30 ring-1 ring-emerald-400/40'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
+                }`}
+              >
+                <Clock className={`w-4 h-4 sm:w-5 sm:h-5 ${statusTab === 'upcoming' ? 'text-emerald-200' : 'text-gray-400'}`} />
+                <span>Upcoming</span>
+                <span className={`ml-1 text-xs px-2 py-0.5 rounded-full font-bold transition-colors ${
+                  statusTab === 'upcoming' ? 'bg-emerald-400/30 text-white' : 'bg-gray-800 text-gray-400 border border-gray-700'
+                }`}>
+                  {upcomingCount}
+                </span>
+              </button>
+
+              {/* 2. Live */}
+              <button
+                type="button"
+                onClick={() => setStatusTab('live')}
+                className={`flex items-center justify-center gap-1.5 sm:gap-2.5 py-3 px-2 sm:px-5 rounded-xl font-bold text-xs sm:text-base transition-all duration-300 ${
+                  statusTab === 'live'
+                    ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-lg shadow-red-500/30 ring-1 ring-red-400/40'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
+                }`}
+              >
+                <span className="relative flex h-2.5 w-2.5 sm:h-3 sm:w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-red-500"></span>
+                </span>
+                <span>Live</span>
+                <span className={`ml-1 text-xs px-2 py-0.5 rounded-full font-bold transition-colors ${
+                  statusTab === 'live' ? 'bg-red-400/30 text-white' : 'bg-gray-800 text-gray-400 border border-gray-700'
+                }`}>
+                  {liveCount}
+                </span>
+              </button>
+
+              {/* 3. Past */}
+              <button
+                type="button"
+                onClick={() => setStatusTab('past')}
+                className={`flex items-center justify-center gap-1.5 sm:gap-2.5 py-3 px-2 sm:px-5 rounded-xl font-bold text-xs sm:text-base transition-all duration-300 ${
+                  statusTab === 'past'
+                    ? 'bg-gradient-to-r from-gray-700 to-slate-800 text-white shadow-lg shadow-gray-600/30 ring-1 ring-gray-500/40'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
+                }`}
+              >
+                <CheckCircle className={`w-4 h-4 sm:w-5 sm:h-5 ${statusTab === 'past' ? 'text-gray-200' : 'text-gray-400'}`} />
+                <span>Past</span>
+                <span className={`ml-1 text-xs px-2 py-0.5 rounded-full font-bold transition-colors ${
+                  statusTab === 'past' ? 'bg-gray-500/30 text-white' : 'bg-gray-800 text-gray-400 border border-gray-700'
+                }`}>
+                  {pastCount}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="md:col-span-2 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <Input
@@ -108,18 +201,6 @@ const SportsTournaments = () => {
               {sportTypes.map(sport => (
                 <SelectItem key={sport} value={sport}>{sport}</SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="bg-gray-800/50 border-gray-700 text-white">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700">
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="upcoming">Upcoming</SelectItem>
-              <SelectItem value="ongoing">Ongoing</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
 
