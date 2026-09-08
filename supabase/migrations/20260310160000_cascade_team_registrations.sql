@@ -84,8 +84,11 @@ WHERE EXISTS (
   SELECT 1 FROM public.tournaments t 
   WHERE t.id = r.tournament_id 
     AND (
-      t.team_size = '2' OR t.team_size = '3' OR t.team_size = '4' OR t.team_size = '5'
-      OR (t.team_size ~ '^[0-9]+$' AND t.team_size::int > 1)
+      CASE 
+        WHEN t.team_size::text ~ '^[0-9]+$' THEN (t.team_size::text)::int > 1
+        ELSE FALSE
+      END
+      OR t.team_mode IN ('duo', 'squad', '5-man')
     )
 )
 AND NOT EXISTS (
