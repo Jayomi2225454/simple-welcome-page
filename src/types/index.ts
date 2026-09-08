@@ -40,6 +40,23 @@ export interface Tournament {
   updated_at?: string;
 }
 
+export interface TournamentTeam {
+  id: string;
+  tournament_id: string;
+  team_name: string;
+  captain_user_id: string;
+  max_members: number;
+  current_members: number;
+  is_full: boolean;
+  status: string;
+  team_code?: string | null;
+  password?: string | null;
+  payment_mode?: 'leader_pays' | 'each_pays' | null;
+  group_name?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
 // Cutoff timestamp: Only tournaments created from this point onwards enforce participant limits
 export const NEW_TOURNAMENT_CUTOFF = '2026-09-06T13:30:00.000Z';
 

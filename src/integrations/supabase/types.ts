@@ -1293,6 +1293,7 @@ export type Database = {
           is_full: boolean
           max_members: number
           password?: string | null
+          payment_mode?: string | null
           status: string
           team_code?: string | null
           team_name: string
@@ -1308,6 +1309,7 @@ export type Database = {
           is_full?: boolean
           max_members: number
           password?: string | null
+          payment_mode?: string | null
           status?: string
           team_code?: string | null
           team_name: string
@@ -1323,6 +1325,7 @@ export type Database = {
           is_full?: boolean
           max_members?: number
           password?: string | null
+          payment_mode?: string | null
           status?: string
           team_code?: string | null
           team_name?: string

@@ -818,24 +818,9 @@ const Admin = () => {
                       </Select>
                     </div>
                     {parseInt(tournamentForm.team_size || '1') > 1 && tournamentForm.entry_fee_type === 'paid' && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Team Payment Mode</label>
-                        <Select 
-                          value={(tournamentForm as any).team_payment_mode || 'each_pays'} 
-                          onValueChange={(value) => setTournamentForm({...tournamentForm, team_payment_mode: value} as any)}
-                        >
-                          <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-gray-700 border-gray-600">
-                            <SelectItem value="each_pays">Each Member Pays</SelectItem>
-                            <SelectItem value="leader_pays">Leader Pays for All</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {(tournamentForm as any).team_payment_mode === 'leader_pays' 
-                            ? 'Leader pays full amount for entire team. Members join free with team code.' 
-                            : 'Each team member pays individually.'}
+                      <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg flex items-center gap-2.5">
+                        <p className="text-xs text-purple-200">
+                          <strong>Team Checkout:</strong> Both payment modes are supported. Team leaders choose at registration checkout whether to pay the full squad fee upfront or have members pay individually.
                         </p>
                       </div>
                     )}

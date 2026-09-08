@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Tournament, isNewTournamentWithCap, isTournamentRegistrationClosed } from '@/types';
-import { Users, Crown, UserPlus, Copy, CheckCircle, Clock, Lock, Hash, XCircle, AlertTriangle, RefreshCw, Trash2, Wallet, Edit3, UserMinus, Info, Phone, Mail, Shield, Eye, EyeOff, Key, Globe, ShieldCheck } from 'lucide-react';
+import { Users, Crown, UserPlus, Copy, CheckCircle, Clock, Lock, Hash, XCircle, AlertTriangle, RefreshCw, Trash2, Wallet, Edit3, UserMinus, Info, Phone, Mail, Shield, Eye, EyeOff, Key, Globe, ShieldCheck, CreditCard } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { tournamentRegistrationService, TournamentRoom } from '@/services/tournamentRegistrationService';
 import RegistrationFormDialog from './RegistrationFormDialog';
@@ -31,6 +31,7 @@ interface Team {
   created_at: string;
   team_code?: string | null;
   password?: string | null;
+  payment_mode?: 'leader_pays' | 'each_pays' | null;
   members?: TeamMember[];
 }
 
@@ -108,9 +109,31 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
   const isFree = !tournament.entry_fee || tournament.entry_fee === 'Free' || tournament.entry_fee === '0' || tournament.entry_fee === '₹0';
   const entryFeeAmount = isFree ? 0 : parseInt(tournament.entry_fee?.replace(/[^0-9]/g, '') || '0');
   
-  // Check if leader pays for all
-  const isLeaderPays = (tournament as any).team_payment_mode === 'leader_pays';
-  const totalLeaderAmount = isLeaderPays ? entryFeeAmount * teamSize : entryFeeAmount;
+  // Choice made by team leader at registration checkout: 'leader_pays' (full team fee) vs 'each_pays' (divided per slot)
+  const [selectedPaymentMode, setSelectedPaymentMode] = useState<'leader_pays' | 'each_pays'>('leader_pays');
+
+  // Total entry fee for the entire squad
+  const totalTeamFee = entryFeeAmount;
+  // Per slot fee (divided per slot)
+  const perSlotFee = teamSize > 1 ? Math.ceil(entryFeeAmount / teamSize) : entryFeeAmount;
+
+  // Helper to check if a specific team was paid upfront by its leader
+  const isTeamLeaderPaid = (team?: Team | null): boolean => {
+    if (isFree) return true;
+    if (!team) return false;
+    if (team.payment_mode === 'leader_pays') return true;
+    if (team.payment_mode === 'each_pays') return false;
+    // Fallback: Check captain's registration
+    const captainMember = team.members?.find(m => m.role === 'captain' || m.user_id === team.captain_user_id);
+    const captainReg = captainMember?.registration;
+    if (captainReg) {
+      if ((captainReg.custom_fields_data as any)?.team_payment_mode === 'leader_pays') return true;
+      if (captainReg.payment_amount && captainReg.payment_amount >= totalTeamFee && totalTeamFee > perSlotFee) return true;
+    }
+    // Fallback for older tournaments created before this update
+    if ((tournament as any).team_payment_mode === 'leader_pays') return true;
+    return false;
+  };
 
   const getTeamModeLabel = () => {
     if (teamSize === 1) return 'Solo';
@@ -435,7 +458,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
             .in('user_id', userIds),
           supabase
             .from('tournament_registrations')
-            .select('user_id, player_name, game_id')
+            .select('user_id, player_name, game_id, payment_amount, custom_fields_data')
             .eq('tournament_id', tournament.id)
             .in('user_id', userIds)
         ]);
@@ -460,6 +483,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
             const reg = registrationsMap[member.user_id];
             return {
               ...member,
+              registration: reg || null,
               profile: {
                 username: profile?.username || null,
                 display_name: profile?.display_name || reg?.player_name || null,
@@ -480,6 +504,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
             user_id: team.captain_user_id,
             role: 'captain',
             joined_at: team.created_at || new Date().toISOString(),
+            registration: capReg || null,
             profile: {
               username: capProfile?.username || null,
               display_name: capProfile?.display_name || capReg?.player_name || 'Team Captain',
@@ -546,10 +571,12 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
       return;
     }
 
-    // For leader_pays mode with sufficient wallet balance, auto-deduct
-    if (isLeaderPays && !isFree) {
-      if (walletBalance >= totalLeaderAmount) {
-        // Direct wallet flow - no payment dialog needed
+    const amountToDeduct = selectedPaymentMode === 'leader_pays' ? totalTeamFee : perSlotFee;
+
+    // For paid tournaments: if wallet balance is sufficient, auto-deduct and create immediately
+    if (!isFree) {
+      if (walletBalance >= amountToDeduct) {
+        // Direct wallet flow - no manual payment dialog needed
         await createTeamWithWallet();
         return;
       }
@@ -635,10 +662,12 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
     return false;
   };
 
-  // Create team with wallet payment (leader_pays mode)
+  // Create team with wallet payment
   const createTeamWithWallet = async () => {
     if (!user || !userProfile) return;
     setIsLoading(true);
+
+    const amountToDeduct = selectedPaymentMode === 'leader_pays' ? totalTeamFee : perSlotFee;
 
     try {
       // Deduct wallet balance
@@ -646,7 +675,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         .from('wallet_transactions')
         .insert({
           user_id: user.id,
-          amount: totalLeaderAmount,
+          amount: amountToDeduct,
           transaction_type: 'tournament_entry',
           status: 'approved',
           mode: 'esports',
@@ -661,8 +690,10 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         tournament_id: tournament.id,
         player_name: userProfile.display_name || userProfile.username || user.email || 'Unknown Player',
         game_id: userProfile.game_id || 'N/A',
-        payment_amount: totalLeaderAmount,
-        custom_fields_data: {}
+        payment_amount: amountToDeduct,
+        custom_fields_data: {
+          team_payment_mode: selectedPaymentMode
+        }
       };
       const registration = await tournamentRegistrationService.registerForTournamentWithWallet(registrationData);
       setUserRegistration(registration);
@@ -679,7 +710,8 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         current_members: 1,
         is_full: teamSize === 1,
         status: 'active',
-        team_code: uniqueCode
+        team_code: uniqueCode,
+        payment_mode: selectedPaymentMode
       };
       if (teamPassword.trim()) {
         teamPayload.password = teamPassword.trim();
@@ -693,17 +725,21 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         .single();
 
       if (teamErr) {
-        // Fallback in case password/team_code columns not yet in DB schema
+        // Fallback in case payment_mode/password/team_code columns not yet in DB schema
+        const fallbackPayload: any = {
+          team_name: teamName.trim(),
+          captain_user_id: user.id,
+          tournament_id: tournament.id,
+          max_members: teamSize,
+          current_members: 1,
+          is_full: teamSize === 1
+        };
+        if (teamPassword.trim()) {
+          fallbackPayload.password = teamPassword.trim();
+        }
         const { data: fallbackTeam, error: fallbackErr } = await supabase
           .from('tournament_teams')
-          .insert({
-            team_name: teamName.trim(),
-            captain_user_id: user.id,
-            tournament_id: tournament.id,
-            max_members: teamSize,
-            current_members: 1,
-            is_full: teamSize === 1
-          })
+          .insert(fallbackPayload)
           .select()
           .single();
         if (fallbackErr) throw fallbackErr;
@@ -711,6 +747,8 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
       } else {
         createdTeam = teamRes;
       }
+
+      createdTeam.payment_mode = selectedPaymentMode;
 
       // CRITICAL: Insert captain into tournament_team_members!
       await supabase
@@ -730,7 +768,9 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
       const shareCode = createdTeam.team_code || createdTeam.id.substring(0, 8).toUpperCase();
       toast({
         title: "Team Created!",
-        description: `₹${totalLeaderAmount} deducted from wallet. Team code is ${shareCode}. Share it for others to join free!`,
+        description: selectedPaymentMode === 'leader_pays'
+          ? `₹${totalTeamFee} deducted for entire squad. Team code is ${shareCode}. Teammates join free!`
+          : `₹${perSlotFee} deducted for your slot. Team code is ${shareCode}. Teammates will pay ₹${perSlotFee} when joining.`,
       });
 
       loadUserData();
@@ -790,7 +830,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
 
       // Check if password required
       requireTeamPasswordIfProtected(matchingTeam, async () => {
-        if (isLeaderPays && !isFree) {
+        if (isFree || isTeamLeaderPaid(matchingTeam)) {
           await joinTeamByCodeFree(matchingTeam);
         } else {
           setPendingTeamAction({ type: 'join_by_code', teamId: matchingTeam.id });
@@ -883,8 +923,8 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
     if (!targetTeam) return;
 
     requireTeamPasswordIfProtected(targetTeam, async () => {
-      if (isLeaderPays && !isFree) {
-        // Members join free in leader_pays mode
+      if (isFree || isTeamLeaderPaid(targetTeam)) {
+        // Members join free in leader_pays mode or free tournament
         await joinTeamDirectFree(targetTeam);
       } else {
         setPendingTeamAction({ type: 'join', teamId: targetTeam.id });
@@ -954,13 +994,17 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
     setShowRegistrationDialog(false);
 
     try {
+      const feeToPay = pendingTeamAction.type === 'create'
+        ? (selectedPaymentMode === 'leader_pays' ? totalTeamFee : perSlotFee)
+        : perSlotFee;
+
       // If paying via wallet, deduct balance first
       if (!isFree && data.paidViaWallet) {
         const { error: txError } = await supabase
           .from('wallet_transactions')
           .insert({
             user_id: user.id,
-            amount: isLeaderPays ? totalLeaderAmount : entryFeeAmount,
+            amount: feeToPay,
             transaction_type: 'tournament_entry',
             status: 'approved',
             mode: 'esports',
@@ -975,9 +1019,12 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         tournament_id: tournament.id,
         player_name: userProfile?.display_name || userProfile?.username || user?.email || 'Unknown Player',
         game_id: data.gameId,
-        payment_amount: isLeaderPays ? totalLeaderAmount : entryFeeAmount,
+        payment_amount: isFree ? 0 : feeToPay,
         payment_screenshot_url: data.screenshotUrl,
-        custom_fields_data: data.customFields
+        custom_fields_data: {
+          ...data.customFields,
+          team_payment_mode: pendingTeamAction.type === 'create' ? selectedPaymentMode : 'member_share'
+        }
       };
 
       const registration = data.paidViaWallet
@@ -997,7 +1044,8 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
           current_members: 1,
           is_full: teamSize === 1,
           status: 'active',
-          team_code: uniqueCode
+          team_code: uniqueCode,
+          payment_mode: selectedPaymentMode
         };
         if (teamPassword.trim()) {
           teamPayload.password = teamPassword.trim();
@@ -1011,17 +1059,21 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
           .single();
 
         if (teamErr) {
-          // Fallback if password or team_code not in schema
+          // Fallback if password, payment_mode, or team_code not in schema
+          const fallbackPayload: any = {
+            team_name: teamName.trim(),
+            captain_user_id: user.id,
+            tournament_id: tournament.id,
+            max_members: teamSize,
+            current_members: 1,
+            is_full: teamSize === 1
+          };
+          if (teamPassword.trim()) {
+            fallbackPayload.password = teamPassword.trim();
+          }
           const { data: fallbackTeam, error: fallbackErr } = await supabase
             .from('tournament_teams')
-            .insert({
-              team_name: teamName.trim(),
-              captain_user_id: user.id,
-              tournament_id: tournament.id,
-              max_members: teamSize,
-              current_members: 1,
-              is_full: teamSize === 1
-            })
+            .insert(fallbackPayload)
             .select()
             .single();
           if (fallbackErr) throw fallbackErr;
@@ -1029,6 +1081,8 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         } else {
           createdTeam = teamRes;
         }
+
+        createdTeam.payment_mode = selectedPaymentMode;
 
         // CRITICAL: Insert captain into tournament_team_members!
         await supabase
@@ -1048,7 +1102,9 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         toast({
           title: "Team Created!",
           description: data.paidViaWallet
-            ? `₹${entryFeeAmount} deducted from wallet. Team code: ${shareCode}.`
+            ? (selectedPaymentMode === 'leader_pays'
+                ? `₹${totalTeamFee} deducted for entire squad. Team code: ${shareCode}. Teammates join free!`
+                : `₹${perSlotFee} deducted for your slot. Team code: ${shareCode}. Teammates pay ₹${perSlotFee} when joining.`)
             : isFree 
               ? `Your team "${createdTeam.team_name}" has been created. Team code: ${shareCode}.`
               : `Your team "${createdTeam.team_name}" has been created. Payment is pending admin approval.`,
@@ -1418,17 +1474,33 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Leader Pays Info */}
-            {isLeaderPays && !isFree && isCaptain && (
-              <div className="p-4 bg-blue-500/10 border border-blue-400/30 rounded-lg">
-                <div className="flex items-center gap-2 text-blue-300">
-                  <Wallet className="w-5 h-5" />
-                  <p className="font-medium">Leader Pays Mode</p>
+            {/* Team Payment Mode Info */}
+            {!isFree && (
+              isTeamLeaderPaid(userTeam) ? (
+                <div className="p-4 bg-blue-500/10 border border-blue-400/30 rounded-lg">
+                  <div className="flex items-center gap-2 text-blue-300">
+                    <Crown className="w-5 h-5 text-yellow-400" />
+                    <p className="font-medium">Full Team Fee Paid</p>
+                  </div>
+                  <p className="text-sm text-blue-200/80 mt-1">
+                    {isCaptain
+                      ? `You paid ₹${totalTeamFee} upfront for the entire squad. Teammates can join 100% free with your team code.`
+                      : 'The team captain paid the entire squad registration fee upfront. You joined for free!'}
+                  </p>
                 </div>
-                <p className="text-sm text-blue-200/80 mt-1">
-                  You paid ₹{totalLeaderAmount} (₹{entryFeeAmount} × {teamSize}) for the entire team. Members join free with your team code.
-                </p>
-              </div>
+              ) : (
+                <div className="p-4 bg-purple-500/10 border border-purple-400/30 rounded-lg">
+                  <div className="flex items-center gap-2 text-purple-300">
+                    <Users className="w-5 h-5 text-purple-400" />
+                    <p className="font-medium">Individual Pay Mode</p>
+                  </div>
+                  <p className="text-sm text-purple-200/80 mt-1">
+                    {isCaptain
+                      ? `You paid your individual share of ₹${perSlotFee}. Teammates will pay their own share (₹${perSlotFee} per slot) when joining.`
+                      : `Individual Pay Mode: Each member pays their own ₹${perSlotFee} slot fee.`}
+                  </p>
+                </div>
+              )
             )}
 
             {/* Payment Pending Message */}
@@ -1499,9 +1571,9 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
                 )}
 
                 <p className="text-xs text-gray-400 mt-2">
-                  {isLeaderPays && !isFree 
+                  {isTeamLeaderPaid(userTeam) && !isFree 
                     ? "Members can join for free using this code since you've already paid for the team."
-                    : "Teammates can join using this code in the 'Join with Team Code' section."}
+                    : `Teammates can join using this code and pay their individual share (₹${perSlotFee}).`}
                 </p>
               </div>
             )}
@@ -1999,25 +2071,89 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
             <p className="text-sm text-purple-200">
               Team Size: {teamSize} players • {availableTeams.length} teams looking for members
             </p>
-            {isLeaderPays && !isFree && (
-              <p className="text-sm text-blue-300 mt-1 flex items-center gap-1">
-                <Wallet className="w-4 h-4" />
-                Leader pays ₹{totalLeaderAmount} (₹{entryFeeAmount} × {teamSize}) for entire team. Members join free.
+            {!isFree && (
+              <p className="text-xs sm:text-sm text-purple-300/90 mt-1.5 flex items-center gap-1.5">
+                <CreditCard className="w-4 h-4 text-purple-400 shrink-0" />
+                <span>Full Team Fee: <strong>₹{totalTeamFee}</strong> • Individual Slot: <strong>₹{perSlotFee}</strong> (divided per slot)</span>
               </p>
             )}
           </div>
 
           {/* Create Team Section */}
           <div className="p-4 bg-black/20 rounded-lg border border-purple-500/20 space-y-3">
-            <div className="flex items-center gap-2 text-white font-medium">
-              <Crown className="w-5 h-5 text-yellow-400" />
-              Create Your Team 
+            <div className="flex items-center justify-between gap-2 text-white font-medium">
+              <div className="flex items-center gap-2">
+                <Crown className="w-5 h-5 text-yellow-400" />
+                <span>Create Your Team</span>
+              </div>
               {!isFree && (
-                <span className="text-sm text-purple-300">
-                  {isLeaderPays ? `(₹${totalLeaderAmount} from wallet)` : `(₹${entryFeeAmount})`}
+                <span className="text-sm font-bold text-purple-300">
+                  {selectedPaymentMode === 'leader_pays' ? `Total: ₹${totalTeamFee}` : `Your Share: ₹${perSlotFee}`}
                 </span>
               )}
             </div>
+
+            {/* Payment Option Selector for Leader */}
+            {!isFree && (
+              <div className="space-y-2 pt-1">
+                <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5 text-purple-400" />
+                  Choose Payment Option
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Option 1: Pay Full Team Fee */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentMode('leader_pays')}
+                    disabled={isRegistrationFull}
+                    className={`p-3 rounded-xl border text-left transition-all relative ${
+                      selectedPaymentMode === 'leader_pays'
+                        ? 'bg-purple-600/20 border-purple-400 ring-1 ring-purple-400/50 shadow-md shadow-purple-500/10'
+                        : 'bg-gray-800/60 border-gray-700 hover:border-gray-600'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-sm text-white flex items-center gap-1.5">
+                        <Crown className="w-4 h-4 text-yellow-400" />
+                        Pay Full Team Fee
+                      </span>
+                      <span className="font-extrabold text-sm text-purple-300">
+                        ₹{totalTeamFee}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-300 leading-snug">
+                      Pay entire registration amount upfront for the whole squad. Teammates join <strong>FREE</strong> with your team code.
+                    </p>
+                  </button>
+
+                  {/* Option 2: Pay Individually */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPaymentMode('each_pays')}
+                    disabled={isRegistrationFull}
+                    className={`p-3 rounded-xl border text-left transition-all relative ${
+                      selectedPaymentMode === 'each_pays'
+                        ? 'bg-blue-600/20 border-blue-400 ring-1 ring-blue-400/50 shadow-md shadow-blue-500/10'
+                        : 'bg-gray-800/60 border-gray-700 hover:border-gray-600'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-sm text-white flex items-center gap-1.5">
+                        <Users className="w-4 h-4 text-blue-400" />
+                        Pay Individually
+                      </span>
+                      <span className="font-extrabold text-sm text-blue-300">
+                        ₹{perSlotFee} / slot
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-300 leading-snug">
+                      Fee divided per slot (₹{totalTeamFee} ÷ {teamSize}). You pay <strong>₹{perSlotFee}</strong> now; teammates pay their own <strong>₹{perSlotFee}</strong> share upon joining.
+                    </p>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {isRegistrationFull && !userTeam && (
               <div className="p-4 bg-amber-500/15 border border-amber-400/40 rounded-xl space-y-1 text-center mb-3 animate-fade-in">
                 <div className="flex items-center justify-center gap-2 text-amber-300 font-bold text-base">
@@ -2071,10 +2207,15 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
                       <Lock className="w-4 h-4 mr-2" />
                       Full / Closed
                     </>
+                  ) : isFree ? (
+                    <>
+                      <Crown className="w-4 h-4 mr-2" />
+                      Create Team
+                    </>
                   ) : (
                     <>
                       <Crown className="w-4 h-4 mr-2" />
-                      Create
+                      {selectedPaymentMode === 'leader_pays' ? `Create & Pay ₹${totalTeamFee}` : `Create & Pay ₹${perSlotFee}`}
                     </>
                   )}
                 </Button>
@@ -2093,12 +2234,12 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
                 )}
               </div>
             </div>
-            {isLeaderPays && !isFree && (
+            {!isFree && (
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-400">
-                  Wallet Balance: <span className={walletBalance >= totalLeaderAmount ? 'text-green-400' : 'text-red-400'}>₹{walletBalance}</span>
+                  Wallet Balance: <span className={walletBalance >= (selectedPaymentMode === 'leader_pays' ? totalTeamFee : perSlotFee) ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}>₹{walletBalance}</span>
                 </span>
-                {walletBalance < totalLeaderAmount && (
+                {walletBalance < (selectedPaymentMode === 'leader_pays' ? totalTeamFee : perSlotFee) && (
                   <Link to="/wallet" className="text-purple-400 hover:underline">
                     Add funds →
                   </Link>
@@ -2106,8 +2247,10 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
               </div>
             )}
             <p className="text-xs text-gray-400">
-              {isLeaderPays && !isFree
-                ? "As captain, you'll pay for the entire team from your wallet and get a Team Code to share."
+              {!isFree
+                ? (selectedPaymentMode === 'leader_pays'
+                    ? `You'll pay ₹${totalTeamFee} upfront for the entire squad. Teammates join 100% free with your team code!`
+                    : `You'll pay your ₹${perSlotFee} slot share. Teammates will pay ₹${perSlotFee} each when joining.`)
                 : "As captain, you'll get a Team Code to share with your teammates."}
             </p>
           </div>
@@ -2117,11 +2260,10 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
             <div className="flex items-center gap-2 text-white font-medium">
               <Hash className="w-5 h-5 text-green-400" />
               Join with Team Code
-              {!isFree && !isLeaderPays && (
-                <span className="text-sm text-green-300">(₹{entryFeeAmount})</span>
-              )}
-              {isLeaderPays && !isFree && (
-                <Badge variant="outline" className="border-green-500/50 text-green-400 text-xs">FREE</Badge>
+              {!isFree && (
+                <span className="text-xs text-gray-300 font-normal">
+                  (Free if leader paid all, or ₹{perSlotFee} share)
+                </span>
               )}
             </div>
             <div className="flex gap-2">
@@ -2142,8 +2284,8 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
               </Button>
             </div>
             <p className="text-xs text-gray-400">
-              {isLeaderPays && !isFree
-                ? "Got a team code from your captain? Join for free — your leader has already paid!"
+              {!isFree
+                ? `Got a team code from your captain? Enter it here to join. If your captain paid the full squad fee, you join free! Otherwise you'll pay your ₹${perSlotFee} slot fee.`
                 : "Got a team code from your captain? Enter it here to join their team."}
             </p>
           </div>
@@ -2231,6 +2373,17 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
                         >
                           {openSlotsCount > 0 ? `${openSlotsCount} ${openSlotsCount === 1 ? 'slot' : 'slots'} open` : 'Full'}
                         </Badge>
+                        {!isFree && (
+                          <Badge 
+                            variant="outline" 
+                            className={isTeamLeaderPaid(team)
+                              ? "border-emerald-500/40 text-emerald-300 bg-emerald-500/10 text-xs"
+                              : "border-cyan-500/40 text-cyan-300 bg-cyan-500/10 text-xs"
+                            }
+                          >
+                            {isTeamLeaderPaid(team) ? 'Leader Paid (Free)' : `Individual (₹${perSlotFee})`}
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-gray-400 flex items-center gap-1.5">
                         <span>Team Code:</span>
@@ -2254,7 +2407,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
                       ) : (
                         <UserPlus className="w-4 h-4 mr-1.5" />
                       )}
-                      {team.password ? 'Join with Password' : (isFree || isLeaderPays ? 'Join Free' : `Join (₹${entryFeeAmount})`)}
+                      {team.password ? 'Join with Password' : (isFree || isTeamLeaderPaid(team) ? 'Join Free' : `Join (₹${perSlotFee})`)}
                     </Button>
                   </div>
 
@@ -2359,7 +2512,7 @@ const TeamRegistration: React.FC<TeamRegistrationProps> = ({ tournament }) => {
         isLoading={isLoading}
         tournamentId={tournament.id}
         isPaid={!isFree}
-        entryFee={isLeaderPays ? totalLeaderAmount : entryFeeAmount}
+        entryFee={pendingTeamAction?.type === 'create' ? (selectedPaymentMode === 'leader_pays' ? totalTeamFee : perSlotFee) : perSlotFee}
       />
 
       {/* Edit Registration Dialog */}
