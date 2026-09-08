@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Check, X, Users, Settings2, Image, ExternalLink, Loader2, MessageSquare, Edit, Save, Crown, UserMinus, UserCheck, ShieldAlert, AlertTriangle, RefreshCw, Trash2, Shield, Info, Copy, UserX, Search, Key, Globe } from 'lucide-react';
+import { Check, X, Users, Settings2, Image, ExternalLink, Loader2, MessageSquare, Edit, Save, Crown, UserMinus, UserCheck, ShieldAlert, AlertTriangle, RefreshCw, Trash2, Shield, Info, Copy, UserX, Search, Key, Globe, Clock, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import TournamentCustomFieldsAdmin from './TournamentCustomFieldsAdmin';
@@ -31,6 +31,8 @@ interface Tournament {
   name: string;
   game: string;
   entry_fee: string | null;
+  team_size?: string | number | null;
+  entry_fee_type?: string | null;
 }
 
 interface AdminTeamMember {
@@ -79,6 +81,8 @@ interface AdminTeam {
   members: AdminTeamMember[];
 }
 
+export type PaymentCategory = 'all' | 'pending_verification' | 'partially_paid' | 'fully_paid' | 'rejected';
+
 const TournamentRegistrationsAdmin = () => {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [selectedTournament, setSelectedTournament] = useState<string>('');
@@ -88,6 +92,10 @@ const TournamentRegistrationsAdmin = () => {
   const [showCustomFields, setShowCustomFields] = useState(false);
   const [screenshotModal, setScreenshotModal] = useState<string | null>(null);
   const [screenshotUrls, setScreenshotUrls] = useState<Record<string, string>>({});
+
+  // Payment status filter state
+  const [paymentFilter, setPaymentFilter] = useState<PaymentCategory>('all');
+  const [registrationSearchQuery, setRegistrationSearchQuery] = useState('');
   
   // Teams management state
   const [adminViewTab, setAdminViewTab] = useState<'registrations' | 'teams'>('registrations');
@@ -122,6 +130,7 @@ const TournamentRegistrationsAdmin = () => {
   const [editFormData, setEditFormData] = useState<Record<string, string>>({});
   const [editPlayerName, setEditPlayerName] = useState('');
   const [editGameId, setEditGameId] = useState('');
+  const [editPaymentStatus, setEditPaymentStatus] = useState<string>('completed');
   const [savingEdit, setSavingEdit] = useState(false);
   const [customFieldDefs, setCustomFieldDefs] = useState<{ field_name: string; field_label: string; field_type: string }[]>([]);
   
@@ -177,7 +186,7 @@ const TournamentRegistrationsAdmin = () => {
     try {
       const { data, error } = await supabase
         .from('tournaments')
-        .select('id, name, game, entry_fee')
+        .select('id, name, game, entry_fee, team_size, entry_fee_type')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -296,19 +305,202 @@ const TournamentRegistrationsAdmin = () => {
     }
   };
 
-  const getStatusBadge = (paymentStatus: string | null) => {
-    switch (paymentStatus) {
-      case 'completed':
-        return <Badge className="bg-green-500"><Check className="w-3 h-3 mr-1" />Approved</Badge>;
-      case 'pending':
-        return <Badge className="bg-yellow-500">Pending Review</Badge>;
-      case 'rejected':
-        return <Badge className="bg-red-500"><X className="w-3 h-3 mr-1" />Rejected</Badge>;
-      case 'failed':
-        return <Badge className="bg-red-500">Failed</Badge>;
-      default:
-        return <Badge variant="outline">{paymentStatus || 'Unknown'}</Badge>;
+  const handleMarkPartialPayment = async (registrationId: string) => {
+    setProcessingId(registrationId);
+    try {
+      const { error } = await supabase
+        .from('tournament_registrations')
+        .update({ 
+          payment_status: 'partially_paid',
+          status: 'confirmed'
+        })
+        .eq('id', registrationId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Status Updated',
+        description: 'Registration marked as Partially Paid'
+      });
+      loadRegistrations();
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update payment status',
+        variant: 'destructive'
+      });
+    } finally {
+      setProcessingId(null);
     }
+  };
+
+  // Map of userId -> AdminTeam for fast lookup
+  const userTeamMap = useMemo(() => {
+    const map: Record<string, AdminTeam> = {};
+    teams.forEach(team => {
+      if (team.captain_user_id) {
+        map[team.captain_user_id] = team;
+      }
+      team.members?.forEach(member => {
+        if (member.user_id) {
+          map[member.user_id] = team;
+        }
+      });
+    });
+    return map;
+  }, [teams]);
+
+  // Compute exact payment status category according to the 4 defined states
+  const getRegistrationPaymentCategory = (registration: Registration): 'pending_verification' | 'partially_paid' | 'fully_paid' | 'rejected' => {
+    const ps = (registration.payment_status || '').toLowerCase();
+    
+    // 1. Rejected state
+    if (ps === 'rejected' || ps === 'failed' || registration.status === 'rejected') {
+      return 'rejected';
+    }
+    
+    // 2. Pending verification state
+    if (ps === 'pending' || ps === 'waiting_verification' || ps === 'under_review') {
+      return 'pending_verification';
+    }
+    
+    // 3. Explicit partially_paid state
+    if (ps === 'partially_paid' || ps === 'partial') {
+      return 'partially_paid';
+    }
+
+    const currentTourn = tournaments.find(t => t.id === selectedTournament);
+    const isFree = !currentTourn?.entry_fee || currentTourn.entry_fee === '0' || currentTourn.entry_fee_type === 'free';
+    if (isFree) {
+      return 'fully_paid';
+    }
+
+    const userTeam = userTeamMap[registration.user_id];
+    if (userTeam) {
+      // If leader paid full team fee and payment is completed
+      if (userTeam.payment_mode === 'leader_pays') {
+        return ps === 'completed' || ps === 'paid' ? 'fully_paid' : 'pending_verification';
+      }
+
+      // Check captain full payment fallback
+      const totalFee = Number(currentTourn?.entry_fee) || 0;
+      const capMember = userTeam.members?.find(m => m.role === 'captain' || m.user_id === userTeam.captain_user_id);
+      if (capMember?.registration?.payment_amount && totalFee > 0 && capMember.registration.payment_amount >= totalFee) {
+        return 'fully_paid';
+      }
+
+      const teamSize = userTeam.max_members || Number(currentTourn?.team_size) || 1;
+      if (teamSize > 1) {
+        // Individual pay mode: count verified paid members
+        const paidCount = userTeam.members?.filter(m => {
+          const s = (m.registration?.payment_status || '').toLowerCase();
+          return s === 'completed' || s === 'paid';
+        }).length || 0;
+
+        if (ps === 'completed' || ps === 'paid') {
+          // If all required slots paid and team full -> Fully Paid
+          if (paidCount >= teamSize && userTeam.is_full) {
+            return 'fully_paid';
+          }
+          // Some members paid their individual share, but total entry fee is incomplete -> Partially Paid
+          return 'partially_paid';
+        }
+      }
+    }
+
+    if (ps === 'completed' || ps === 'paid') {
+      return 'fully_paid';
+    }
+
+    if (registration.payment_screenshot_url || (registration.payment_amount && registration.payment_amount > 0)) {
+      return 'pending_verification';
+    }
+
+    return 'pending_verification';
+  };
+
+  const renderStatusBadge = (registration: Registration) => {
+    const category = getRegistrationPaymentCategory(registration);
+    const userTeam = userTeamMap[registration.user_id];
+    const currentTourn = tournaments.find(t => t.id === selectedTournament);
+    const teamSize = userTeam?.max_members || Number(currentTourn?.team_size) || 1;
+
+    switch (category) {
+      case 'pending_verification':
+        return (
+          <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2.5 py-1 text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+            <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>Pending Verification</span>
+          </Badge>
+        );
+      case 'partially_paid': {
+        const paidCount = userTeam?.members?.filter(m => {
+          const s = (m.registration?.payment_status || '').toLowerCase();
+          return s === 'completed' || s === 'paid';
+        }).length || 1;
+        return (
+          <Badge className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2.5 py-1 text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+            <AlertCircle className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>Partially Paid{userTeam && teamSize > 1 ? ` (${paidCount}/${teamSize})` : ''}</span>
+          </Badge>
+        );
+      }
+      case 'fully_paid':
+        return (
+          <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>Fully Paid</span>
+          </Badge>
+        );
+      case 'rejected':
+        return (
+          <Badge className="bg-red-500/20 text-red-300 border border-red-500/40 px-2.5 py-1 text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+            <X className="w-3.5 h-3.5 text-red-400 shrink-0" />
+            <span>Rejected</span>
+          </Badge>
+        );
+    }
+  };
+
+  const getStatusBadge = (paymentStatus: string | null, registration?: any) => {
+    if (registration && registration.player_name) {
+      return renderStatusBadge(registration as Registration);
+    }
+    const ps = (paymentStatus || '').toLowerCase();
+    if (ps === 'completed' || ps === 'paid') {
+      return (
+        <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 text-xs font-semibold flex items-center gap-1">
+          <Check className="w-3 h-3 text-emerald-400" />
+          Fully Paid
+        </Badge>
+      );
+    }
+    if (ps === 'partially_paid' || ps === 'partial') {
+      return (
+        <Badge className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 text-xs font-semibold flex items-center gap-1">
+          <AlertCircle className="w-3 h-3 text-cyan-400" />
+          Partially Paid
+        </Badge>
+      );
+    }
+    if (ps === 'pending' || ps === 'waiting_verification') {
+      return (
+        <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 text-xs font-semibold flex items-center gap-1">
+          <Clock className="w-3 h-3 text-amber-400" />
+          Pending Verification
+        </Badge>
+      );
+    }
+    if (ps === 'rejected' || ps === 'failed') {
+      return (
+        <Badge className="bg-red-500/20 text-red-300 border border-red-500/40 px-2 py-0.5 text-xs font-semibold flex items-center gap-1">
+          <X className="w-3 h-3 text-red-400" />
+          Rejected
+        </Badge>
+      );
+    }
+    return <Badge variant="outline">{paymentStatus || 'Unknown'}</Badge>;
   };
 
   const getScreenshotUrl = (registration: Registration): string | null => {
@@ -319,6 +511,7 @@ const TournamentRegistrationsAdmin = () => {
     setEditingRegistration(registration);
     setEditPlayerName(registration.player_name);
     setEditGameId(registration.game_id);
+    setEditPaymentStatus(registration.payment_status || 'completed');
     
     // Extract custom fields data (excluding rejection_ keys)
     const cfData = registration.custom_fields_data || {};
@@ -363,6 +556,7 @@ const TournamentRegistrationsAdmin = () => {
         .update({
           player_name: editPlayerName,
           game_id: editGameId,
+          payment_status: editPaymentStatus,
           custom_fields_data: updatedCustomFields
         })
         .eq('id', editingRegistration.id);
@@ -723,6 +917,51 @@ const TournamentRegistrationsAdmin = () => {
     return matchesSearch && matchesStatus;
   });
 
+  // Count registrations for each defined payment status
+  const counts = useMemo(() => {
+    let pending_verification = 0;
+    let partially_paid = 0;
+    let fully_paid = 0;
+    let rejected = 0;
+
+    registrations.forEach(r => {
+      const cat = getRegistrationPaymentCategory(r);
+      if (cat === 'pending_verification') pending_verification++;
+      else if (cat === 'partially_paid') partially_paid++;
+      else if (cat === 'fully_paid') fully_paid++;
+      else if (cat === 'rejected') rejected++;
+    });
+
+    return {
+      all: registrations.length,
+      pending_verification,
+      partially_paid,
+      fully_paid,
+      rejected
+    };
+  }, [registrations, userTeamMap, tournaments, selectedTournament]);
+
+  // Filter registrations by payment category and search text
+  const filteredRegistrations = useMemo(() => {
+    return registrations.filter(reg => {
+      if (paymentFilter !== 'all') {
+        const cat = getRegistrationPaymentCategory(reg);
+        if (cat !== paymentFilter) return false;
+      }
+
+      if (registrationSearchQuery.trim()) {
+        const q = registrationSearchQuery.trim().toLowerCase();
+        const matchesName = reg.player_name?.toLowerCase().includes(q);
+        const matchesGameId = reg.game_id?.toLowerCase().includes(q);
+        const userTeam = userTeamMap[reg.user_id];
+        const matchesTeam = userTeam?.team_name?.toLowerCase().includes(q);
+        if (!matchesName && !matchesGameId && !matchesTeam) return false;
+      }
+
+      return true;
+    });
+  }, [registrations, paymentFilter, registrationSearchQuery, userTeamMap, tournaments, selectedTournament]);
+
   return (
     <div className="space-y-6">
       {/* Tournament Selector & Tab Switcher */}
@@ -801,212 +1040,497 @@ const TournamentRegistrationsAdmin = () => {
       {/* Individual Registrations View */}
       {adminViewTab === 'registrations' && (
         <div className="space-y-6">
-          {/* Stats */}
-          <div className="grid md:grid-cols-4 gap-6">
-        <Card className="bg-gradient-to-br from-blue-900/50 to-blue-800/50 border-blue-500/30">
-          <CardContent className="p-6 text-center">
-            <Users className="w-8 h-8 text-blue-400 mx-auto mb-2" />
-            <div className="text-2xl font-bold text-white">
-              {registrations.length}
-            </div>
-            <div className="text-blue-300 text-sm">Total Registrations</div>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-gradient-to-br from-yellow-900/50 to-yellow-800/50 border-yellow-500/30">
-          <CardContent className="p-6 text-center">
-            <Users className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
-            <div className="text-2xl font-bold text-white">
-              {registrations.filter(r => r.payment_status === 'pending').length}
-            </div>
-            <div className="text-yellow-300 text-sm">Pending Approvals</div>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-gradient-to-br from-green-900/50 to-green-800/50 border-green-500/30">
-          <CardContent className="p-6 text-center">
-            <Check className="w-8 h-8 text-green-400 mx-auto mb-2" />
-            <div className="text-2xl font-bold text-white">
-              {registrations.filter(r => r.payment_status === 'completed').length}
-            </div>
-            <div className="text-green-300 text-sm">Confirmed Players</div>
-          </CardContent>
-        </Card>
+          {/* Stats Cards - Clickable to filter */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+            <Card 
+              onClick={() => setPaymentFilter('all')}
+              className={`cursor-pointer transition-all border ${
+                paymentFilter === 'all' 
+                  ? 'ring-2 ring-purple-500 bg-purple-950/40 border-purple-500 shadow-md' 
+                  : 'bg-gradient-to-br from-blue-900/40 to-blue-800/40 border-blue-500/30 hover:border-blue-400/60'
+              }`}
+            >
+              <CardContent className="p-4 text-center">
+                <Users className="w-6 h-6 text-blue-400 mx-auto mb-1.5" />
+                <div className="text-2xl font-bold text-white">{counts.all}</div>
+                <div className="text-blue-300 text-xs font-medium">All Registrations</div>
+              </CardContent>
+            </Card>
 
-        <Card className="bg-gradient-to-br from-red-900/50 to-red-800/50 border-red-500/30">
-          <CardContent className="p-6 text-center">
-            <X className="w-8 h-8 text-red-400 mx-auto mb-2" />
-            <div className="text-2xl font-bold text-white">
-              {registrations.filter(r => r.payment_status === 'rejected').length}
-            </div>
-            <div className="text-red-300 text-sm">Rejected</div>
-          </CardContent>
-        </Card>
-      </div>
+            <Card 
+              onClick={() => setPaymentFilter('pending_verification')}
+              className={`cursor-pointer transition-all border ${
+                paymentFilter === 'pending_verification' 
+                  ? 'ring-2 ring-amber-500 bg-amber-950/40 border-amber-500 shadow-md' 
+                  : 'bg-gradient-to-br from-yellow-900/40 to-yellow-800/40 border-yellow-500/30 hover:border-yellow-400/60'
+              }`}
+            >
+              <CardContent className="p-4 text-center">
+                <Clock className="w-6 h-6 text-yellow-400 mx-auto mb-1.5" />
+                <div className="text-2xl font-bold text-white">{counts.pending_verification}</div>
+                <div className="text-yellow-300 text-xs font-medium">Pending Verification</div>
+              </CardContent>
+            </Card>
 
-      {/* Registrations List */}
-      <Card className="bg-gray-800 border-gray-700">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center">
-            <Users className="w-5 h-5 mr-2" />
-            Tournament Registrations
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
-            </div>
-          ) : registrations.length === 0 ? (
-            <div className="text-center text-gray-400 py-8">
-              No registrations found for this tournament
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {registrations.map(registration => (
-                <Card key={registration.id} className={`border ${
-                  registration.payment_status === 'pending' 
-                    ? 'bg-yellow-900/20 border-yellow-500/30' 
-                    : registration.payment_status === 'rejected'
-                    ? 'bg-red-900/20 border-red-500/30'
-                    : 'bg-gray-700 border-gray-600'
-                }`}>
-                  <CardContent className="p-4">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="p-3 rounded-xl bg-purple-500">
-                          <Users className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                          <div className="text-white font-semibold text-lg">
-                            {registration.player_name}
-                          </div>
-                          <div className="text-gray-400 text-sm">
-                            Game ID: <span className="text-purple-400">{registration.game_id}</span>
-                          </div>
-                          {registration.payment_amount && registration.payment_amount > 0 && (
-                            <div className="text-gray-400 text-sm">
-                              Amount: <span className="text-green-400">₹{registration.payment_amount}</span>
-                            </div>
-                          )}
-                          <div className="text-gray-500 text-xs">
-                            {new Date(registration.created_at || '').toLocaleString()}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        {getStatusBadge(registration.payment_status)}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openEditDialog(registration)}
-                          className="border-blue-500 text-blue-400 hover:bg-blue-500/20"
-                        >
-                          <Edit className="w-4 h-4 mr-1" />
-                          Edit
-                        </Button>
-                      </div>
-                    </div>
-                    
-                    {/* Rejection Comment Display */}
-                    {registration.payment_status === 'rejected' && registration.custom_fields_data?.rejection_comment && (
-                      <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-3 mb-3">
-                        <div className="flex items-center gap-2 text-red-400 text-sm font-medium mb-1">
-                          <MessageSquare className="w-4 h-4" />
-                          Rejection Reason:
-                        </div>
-                        <p className="text-red-200 text-sm">{registration.custom_fields_data.rejection_comment}</p>
-                        {registration.custom_fields_data.rejection_date && (
-                          <p className="text-red-400/60 text-xs mt-1">
-                            Rejected on: {new Date(registration.custom_fields_data.rejection_date).toLocaleString()}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    
-                    {/* Custom Fields Data */}
-                    {registration.custom_fields_data && Object.keys(registration.custom_fields_data).filter(k => !k.startsWith('rejection_')).length > 0 && (
-                      <div className="bg-gray-800/50 rounded-lg p-3 mb-3">
-                        <span className="text-gray-500 text-sm font-medium">Additional Information:</span>
-                        <div className="mt-2 grid grid-cols-2 gap-2">
-                          {Object.entries(registration.custom_fields_data)
-                            .filter(([key]) => !key.startsWith('rejection_'))
-                            .map(([key, value]) => (
-                            <div key={key} className="text-sm">
-                              <span className="text-gray-500">{key.replace(/_/g, ' ')}:</span>
-                              <span className="text-white ml-2">{String(value)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Payment Screenshot */}
-                    {registration.payment_screenshot_url && (
-                      <div className="bg-gray-800/50 rounded-lg p-3 mb-3">
-                        <span className="text-gray-500 text-sm font-medium">Payment Screenshot:</span>
-                        <div className="mt-2">
-                          {getScreenshotUrl(registration) ? (
-                            <button
-                              onClick={() => setScreenshotModal(getScreenshotUrl(registration))}
-                              className="relative group"
-                            >
-                              <img 
-                                src={getScreenshotUrl(registration)!} 
-                                alt="Payment Screenshot" 
-                                className="w-32 h-24 object-cover rounded border border-gray-600 hover:border-purple-500 transition-colors"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = '/placeholder.svg';
-                                }}
-                              />
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded">
-                                <ExternalLink className="w-5 h-5 text-white" />
+            <Card 
+              onClick={() => setPaymentFilter('partially_paid')}
+              className={`cursor-pointer transition-all border ${
+                paymentFilter === 'partially_paid' 
+                  ? 'ring-2 ring-cyan-500 bg-cyan-950/40 border-cyan-500 shadow-md' 
+                  : 'bg-gradient-to-br from-cyan-900/40 to-cyan-800/40 border-cyan-500/30 hover:border-cyan-400/60'
+              }`}
+            >
+              <CardContent className="p-4 text-center">
+                <AlertCircle className="w-6 h-6 text-cyan-400 mx-auto mb-1.5" />
+                <div className="text-2xl font-bold text-white">{counts.partially_paid}</div>
+                <div className="text-cyan-300 text-xs font-medium">Partially Paid</div>
+              </CardContent>
+            </Card>
+
+            <Card 
+              onClick={() => setPaymentFilter('fully_paid')}
+              className={`cursor-pointer transition-all border ${
+                paymentFilter === 'fully_paid' 
+                  ? 'ring-2 ring-emerald-500 bg-emerald-950/40 border-emerald-500 shadow-md' 
+                  : 'bg-gradient-to-br from-green-900/40 to-green-800/40 border-green-500/30 hover:border-green-400/60'
+              }`}
+            >
+              <CardContent className="p-4 text-center">
+                <Check className="w-6 h-6 text-green-400 mx-auto mb-1.5" />
+                <div className="text-2xl font-bold text-white">{counts.fully_paid}</div>
+                <div className="text-green-300 text-xs font-medium">Fully Paid</div>
+              </CardContent>
+            </Card>
+
+            <Card 
+              onClick={() => setPaymentFilter('rejected')}
+              className={`cursor-pointer transition-all border ${
+                paymentFilter === 'rejected' 
+                  ? 'ring-2 ring-red-500 bg-red-950/40 border-red-500 shadow-md' 
+                  : 'bg-gradient-to-br from-red-900/40 to-red-800/40 border-red-500/30 hover:border-red-400/60'
+              }`}
+            >
+              <CardContent className="p-4 text-center">
+                <X className="w-6 h-6 text-red-400 mx-auto mb-1.5" />
+                <div className="text-2xl font-bold text-white">{counts.rejected}</div>
+                <div className="text-red-300 text-xs font-medium">Rejected</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Registrations List */}
+          <Card className="bg-gray-800 border-gray-700 shadow-xl">
+            <CardHeader className="pb-3 border-b border-gray-700/60 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle className="text-white flex items-center text-lg">
+                  <Users className="w-5 h-5 mr-2 text-purple-400" />
+                  <span>Tournament Registrations</span>
+                  <Badge variant="secondary" className="ml-2.5 bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-normal">
+                    Showing {filteredRegistrations.length} of {registrations.length}
+                  </Badge>
+                </CardTitle>
+
+                {/* Player Search Bar */}
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input
+                    placeholder="Search player, game ID, team..."
+                    value={registrationSearchQuery}
+                    onChange={(e) => setRegistrationSearchQuery(e.target.value)}
+                    className="pl-9 bg-gray-900/90 border-gray-700 text-white text-xs h-8"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Filter Tabs & Dropdown */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                {/* Desktop & Tablet Tabs */}
+                <div className="hidden sm:flex flex-wrap items-center gap-1.5 p-1 bg-gray-900/70 rounded-lg border border-gray-700/80">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentFilter('all')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      paymentFilter === 'all'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    }`}
+                  >
+                    <span>All</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      paymentFilter === 'all' ? 'bg-black/30 text-white' : 'bg-gray-800 text-gray-300'
+                    }`}>
+                      {counts.all}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentFilter('pending_verification')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      paymentFilter === 'pending_verification'
+                        ? 'bg-amber-500 text-black shadow-md'
+                        : 'text-gray-400 hover:text-amber-300 hover:bg-gray-800'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Pending Verification</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      paymentFilter === 'pending_verification' ? 'bg-black/30 text-black' : 'bg-amber-500/20 text-amber-300'
+                    }`}>
+                      {counts.pending_verification}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentFilter('partially_paid')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      paymentFilter === 'partially_paid'
+                        ? 'bg-cyan-600 text-white shadow-md'
+                        : 'text-gray-400 hover:text-cyan-300 hover:bg-gray-800'
+                    }`}
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>Partially Paid</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      paymentFilter === 'partially_paid' ? 'bg-black/30 text-white' : 'bg-cyan-500/20 text-cyan-300'
+                    }`}>
+                      {counts.partially_paid}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentFilter('fully_paid')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      paymentFilter === 'fully_paid'
+                        ? 'bg-emerald-600 text-white shadow-md'
+                        : 'text-gray-400 hover:text-emerald-300 hover:bg-gray-800'
+                    }`}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Fully Paid</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      paymentFilter === 'fully_paid' ? 'bg-black/30 text-white' : 'bg-emerald-500/20 text-emerald-300'
+                    }`}>
+                      {counts.fully_paid}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentFilter('rejected')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      paymentFilter === 'rejected'
+                        ? 'bg-red-600 text-white shadow-md'
+                        : 'text-gray-400 hover:text-red-300 hover:bg-gray-800'
+                    }`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Rejected</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      paymentFilter === 'rejected' ? 'bg-black/30 text-white' : 'bg-red-500/20 text-red-300'
+                    }`}>
+                      {counts.rejected}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Mobile Dropdown */}
+                <div className="block sm:hidden w-full">
+                  <Select value={paymentFilter} onValueChange={(val) => setPaymentFilter(val as PaymentCategory)}>
+                    <SelectTrigger className="w-full bg-gray-900 border-gray-700 text-white text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-800 border-gray-700 text-white">
+                      <SelectItem value="all">All ({counts.all})</SelectItem>
+                      <SelectItem value="pending_verification">Pending Verification ({counts.pending_verification})</SelectItem>
+                      <SelectItem value="partially_paid">Partially Paid ({counts.partially_paid})</SelectItem>
+                      <SelectItem value="fully_paid">Fully Paid ({counts.fully_paid})</SelectItem>
+                      <SelectItem value="rejected">Rejected ({counts.rejected})</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="pt-4">
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
+                </div>
+              ) : filteredRegistrations.length === 0 ? (
+                <div className="text-center text-gray-400 py-10 space-y-2">
+                  <Users className="w-10 h-10 text-gray-600 mx-auto" />
+                  <p className="text-base font-medium text-gray-300">
+                    {registrations.length === 0 
+                      ? "No registrations found for this tournament"
+                      : `No registrations found for ${
+                          paymentFilter === 'pending_verification' ? 'Pending Verification' :
+                          paymentFilter === 'partially_paid' ? 'Partially Paid' :
+                          paymentFilter === 'fully_paid' ? 'Fully Paid' :
+                          paymentFilter === 'rejected' ? 'Rejected' : 'selected filters'
+                        }`
+                    }
+                  </p>
+                  {(paymentFilter !== 'all' || registrationSearchQuery) && (
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => {
+                        setPaymentFilter('all');
+                        setRegistrationSearchQuery('');
+                      }}
+                      className="border-gray-700 text-gray-300 text-xs mt-2"
+                    >
+                      Clear Filters (Show All {registrations.length})
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredRegistrations.map(registration => {
+                    const category = getRegistrationPaymentCategory(registration);
+                    const userTeam = userTeamMap[registration.user_id];
+                    const currentTourn = tournaments.find(t => t.id === selectedTournament);
+                    const teamSize = userTeam?.max_members || Number(currentTourn?.team_size) || 1;
+                    const paidMembersCount = userTeam?.members?.filter(m => {
+                      const s = (m.registration?.payment_status || '').toLowerCase();
+                      return s === 'completed' || s === 'paid';
+                    }).length || 1;
+
+                    return (
+                      <Card key={registration.id} className={`border transition-all ${
+                        category === 'pending_verification' 
+                          ? 'bg-amber-950/15 border-amber-500/40 shadow-sm' 
+                          : category === 'partially_paid'
+                          ? 'bg-cyan-950/15 border-cyan-500/40 shadow-sm'
+                          : category === 'rejected'
+                          ? 'bg-red-950/15 border-red-500/40 shadow-sm'
+                          : 'bg-gray-700/80 border-gray-600 hover:border-gray-500'
+                      }`}>
+                        <CardContent className="p-4">
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-3">
+                            <div className="flex items-start space-x-3">
+                              <div className={`p-3 rounded-xl shrink-0 ${
+                                category === 'pending_verification'
+                                  ? 'bg-amber-500 text-black'
+                                  : category === 'partially_paid'
+                                  ? 'bg-cyan-600 text-white'
+                                  : category === 'rejected'
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-emerald-600 text-white'
+                              }`}>
+                                <Users className="w-5 h-5" />
                               </div>
-                            </button>
-                          ) : (
-                            <div className="flex items-center gap-2 text-gray-400">
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              <span className="text-sm">Loading screenshot...</span>
+                              <div>
+                                <div className="text-white font-semibold text-lg flex items-center gap-2 flex-wrap">
+                                  <span>{registration.player_name}</span>
+                                  {userTeam && (
+                                    <Badge variant="outline" className="border-purple-500/40 text-purple-300 bg-purple-500/10 text-xs font-normal flex items-center gap-1">
+                                      <Users className="w-3 h-3 text-purple-400" />
+                                      Team: {userTeam.team_name}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="text-gray-400 text-sm flex items-center gap-3 flex-wrap mt-0.5">
+                                  <span>Game ID: <strong className="text-purple-400 font-mono">{registration.game_id}</strong></span>
+                                  {registration.payment_amount && registration.payment_amount > 0 && (
+                                    <span>Amount: <strong className="text-green-400 font-semibold">₹{registration.payment_amount}</strong></span>
+                                  )}
+                                </div>
+                                {userTeam && userTeam.payment_mode && (
+                                  <div className="text-xs text-gray-400 mt-1 flex items-center gap-2 flex-wrap">
+                                    <span className="text-gray-500">
+                                      Mode: {userTeam.payment_mode === 'leader_pays' ? 'Leader Paid Full Squad' : 'Individual Pay'}
+                                    </span>
+                                    {category === 'partially_paid' && (
+                                      <span className="text-cyan-300 font-medium bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
+                                        {paidMembersCount}/{teamSize} members paid their share
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                <div className="text-gray-500 text-xs mt-1">
+                                  Registered: {new Date(registration.created_at || '').toLocaleString()}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-2 shrink-0">
+                              {renderStatusBadge(registration)}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openEditDialog(registration)}
+                                className="border-blue-500 text-blue-400 hover:bg-blue-500/20 h-8 text-xs"
+                              >
+                                <Edit className="w-3.5 h-3.5 mr-1" />
+                                Edit
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          {/* Rejection Comment Display */}
+                          {registration.payment_status === 'rejected' && registration.custom_fields_data?.rejection_comment && (
+                            <div className="bg-red-900/30 border border-red-500/30 rounded-lg p-3 mb-3">
+                              <div className="flex items-center gap-2 text-red-400 text-sm font-medium mb-1">
+                                <MessageSquare className="w-4 h-4" />
+                                Rejection Reason:
+                              </div>
+                              <p className="text-red-200 text-sm">{registration.custom_fields_data.rejection_comment}</p>
+                              {registration.custom_fields_data.rejection_date && (
+                                <p className="text-red-400/60 text-xs mt-1">
+                                  Rejected on: {new Date(registration.custom_fields_data.rejection_date).toLocaleString()}
+                                </p>
+                              )}
                             </div>
                           )}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Actions for pending payments */}
-                    {registration.payment_status === 'pending' && registration.payment_amount && registration.payment_amount > 0 && (
-                      <div className="mt-4 flex space-x-2">
-                        <Button
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700"
-                          onClick={() => handleApprovePayment(registration.id)}
-                          disabled={processingId === registration.id}
-                        >
-                          {processingId === registration.id ? (
-                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                          ) : (
-                            <Check className="w-4 h-4 mr-1" />
+                          
+                          {/* Custom Fields Data */}
+                          {registration.custom_fields_data && Object.keys(registration.custom_fields_data).filter(k => !k.startsWith('rejection_')).length > 0 && (
+                            <div className="bg-gray-800/50 rounded-lg p-3 mb-3">
+                              <span className="text-gray-500 text-sm font-medium">Additional Information:</span>
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                {Object.entries(registration.custom_fields_data)
+                                  .filter(([key]) => !key.startsWith('rejection_'))
+                                  .map(([key, value]) => (
+                                  <div key={key} className="text-sm">
+                                    <span className="text-gray-500">{key.replace(/_/g, ' ')}:</span>
+                                    <span className="text-white ml-2">{String(value)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           )}
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => openRejectDialog(registration)}
-                          disabled={processingId === registration.id}
-                        >
-                          <X className="w-4 h-4 mr-1" />
-                          Reject
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                          
+                          {/* Payment Screenshot */}
+                          {registration.payment_screenshot_url && (
+                            <div className="bg-gray-800/50 rounded-lg p-3 mb-3">
+                              <span className="text-gray-500 text-sm font-medium">Payment Screenshot:</span>
+                              <div className="mt-2">
+                                {getScreenshotUrl(registration) ? (
+                                  <button
+                                    onClick={() => setScreenshotModal(getScreenshotUrl(registration))}
+                                    className="relative group"
+                                  >
+                                    <img 
+                                      src={getScreenshotUrl(registration)!} 
+                                      alt="Payment Screenshot" 
+                                      className="w-32 h-24 object-cover rounded border border-gray-600 hover:border-purple-500 transition-colors"
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).src = '/placeholder.svg';
+                                      }}
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded">
+                                      <ExternalLink className="w-5 h-5 text-white" />
+                                    </div>
+                                  </button>
+                                ) : (
+                                  <div className="flex items-center gap-2 text-gray-400">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    <span className="text-sm">Loading screenshot...</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Action Buttons for Verification & Status Management */}
+                          <div className="mt-3 pt-3 border-t border-gray-700/60 flex items-center gap-2 flex-wrap">
+                            {category === 'pending_verification' && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  className="bg-green-600 hover:bg-green-700 text-white h-8 text-xs font-semibold"
+                                  onClick={() => handleApprovePayment(registration.id)}
+                                  disabled={processingId === registration.id}
+                                >
+                                  {processingId === registration.id ? (
+                                    <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                  ) : (
+                                    <Check className="w-3.5 h-3.5 mr-1" />
+                                  )}
+                                  Approve (Fully Paid)
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="bg-cyan-600 hover:bg-cyan-700 text-white h-8 text-xs font-semibold"
+                                  onClick={() => handleMarkPartialPayment(registration.id)}
+                                  disabled={processingId === registration.id}
+                                >
+                                  {processingId === registration.id ? (
+                                    <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                  ) : (
+                                    <AlertCircle className="w-3.5 h-3.5 mr-1" />
+                                  )}
+                                  Mark Partially Paid
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-8 text-xs font-semibold"
+                                  onClick={() => openRejectDialog(registration)}
+                                  disabled={processingId === registration.id}
+                                >
+                                  <X className="w-3.5 h-3.5 mr-1" />
+                                  Reject
+                                </Button>
+                              </>
+                            )}
+
+                            {category === 'partially_paid' && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  className="bg-green-600 hover:bg-green-700 text-white h-8 text-xs font-semibold"
+                                  onClick={() => handleApprovePayment(registration.id)}
+                                  disabled={processingId === registration.id}
+                                >
+                                  {processingId === registration.id ? (
+                                    <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                  ) : (
+                                    <Check className="w-3.5 h-3.5 mr-1" />
+                                  )}
+                                  Mark Fully Paid
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-8 text-xs font-semibold"
+                                  onClick={() => openRejectDialog(registration)}
+                                  disabled={processingId === registration.id}
+                                >
+                                  <X className="w-3.5 h-3.5 mr-1" />
+                                  Reject
+                                </Button>
+                              </>
+                            )}
+
+                            {category === 'rejected' && (
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700 text-white h-8 text-xs font-semibold"
+                                onClick={() => handleApprovePayment(registration.id)}
+                                disabled={processingId === registration.id}
+                              >
+                                {processingId === registration.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5 mr-1" />
+                                )}
+                                Re-Approve (Fully Paid)
+                              </Button>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -1506,6 +2030,20 @@ const TournamentRegistrationsAdmin = () => {
                   onChange={(e) => setEditGameId(e.target.value)}
                   className="bg-gray-800 border-gray-700 text-white"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-gray-300">Payment Status</Label>
+                <Select value={editPaymentStatus} onValueChange={setEditPaymentStatus}>
+                  <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-800 border-gray-700 text-white">
+                    <SelectItem value="pending">Pending Verification</SelectItem>
+                    <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                    <SelectItem value="completed">Fully Paid</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Custom Fields */}
