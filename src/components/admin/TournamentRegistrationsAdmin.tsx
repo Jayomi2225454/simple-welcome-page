@@ -33,7 +33,6 @@ interface Tournament {
   game: string;
   entry_fee: string | null;
   team_size?: string | number | null;
-  entry_fee_type?: string | null;
 }
 
 interface AdminTeamMember {
@@ -124,7 +123,6 @@ const TournamentRegistrationsAdmin = () => {
   // Disable / Enable team state
   const [toggleTeamStatusDialog, setToggleTeamStatusDialog] = useState<{ team: AdminTeam; targetStatus: 'disabled' | 'active' } | null>(null);
   const [processingTeamStatus, setProcessingTeamStatus] = useState(false);
-  const [cleaningOrphaned, setCleaningOrphaned] = useState(false);
   
   // Reject dialog state
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -193,16 +191,21 @@ const TournamentRegistrationsAdmin = () => {
     try {
       const { data, error } = await supabase
         .from('tournaments')
-        .select('id, name, game, entry_fee, team_size, entry_fee_type')
+        .select('id, name, game, entry_fee, team_size')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       setTournaments(data || []);
       if (data && data.length > 0) {
-        setSelectedTournament(data[0].id);
+        setSelectedTournament(prev => prev || data[0].id);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading tournaments:', error);
+      toast({
+        title: 'Error Loading Tournaments',
+        description: error.message || 'Failed to load tournaments list',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -378,7 +381,7 @@ const TournamentRegistrationsAdmin = () => {
     }
 
     const currentTourn = tournaments.find(t => t.id === selectedTournament);
-    const isFree = !currentTourn?.entry_fee || currentTourn.entry_fee === '0' || currentTourn.entry_fee_type === 'free';
+    const isFree = !currentTourn?.entry_fee || currentTourn.entry_fee === '0' || currentTourn.entry_fee.toLowerCase() === 'free';
     if (isFree) {
       return 'fully_paid';
     }
@@ -1018,47 +1021,6 @@ const TournamentRegistrationsAdmin = () => {
     }
   };
 
-  // Find orphaned registrations in team tournament where the team no longer exists
-  const orphanedRegistrations = useMemo(() => {
-    const currentTourn = tournaments.find(t => t.id === selectedTournament);
-    const isTeamTourn = (Number(currentTourn?.team_size) || 1) > 1;
-    if (!isTeamTourn) return [];
-    
-    return registrations.filter(r => !userTeamMap[r.user_id]);
-  }, [registrations, userTeamMap, tournaments, selectedTournament]);
-
-  const handleCleanupOrphanedRegistrations = async () => {
-    if (orphanedRegistrations.length === 0 || !selectedTournament) return;
-    setCleaningOrphaned(true);
-    try {
-      const orphanedIds = orphanedRegistrations.map(r => r.id);
-      const { error } = await supabase
-        .from('tournament_registrations')
-        .delete()
-        .in('id', orphanedIds);
-
-      if (error) throw error;
-
-      await tournamentRegistrationService.syncTournamentParticipantCount(selectedTournament);
-
-      toast({
-        title: "Orphaned Registrations Cleaned",
-        description: `Successfully removed ${orphanedIds.length} orphaned registration(s) with no active team.`
-      });
-
-      loadRegistrations();
-      loadTeams();
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to clean orphaned registrations",
-        variant: "destructive"
-      });
-    } finally {
-      setCleaningOrphaned(false);
-    }
-  };
-
   // Check if a registration is active (not cancelled, not removed, and not part of a disabled team)
   const isRegistrationActive = (reg: Registration): boolean => {
     const regStatus = (reg.status || '').toLowerCase();
@@ -1175,12 +1137,16 @@ const TournamentRegistrationsAdmin = () => {
             <SelectTrigger className="w-80 bg-gray-800 border-gray-700 text-white">
               <SelectValue placeholder="Select a tournament" />
             </SelectTrigger>
-            <SelectContent>
-              {tournaments.map(tournament => (
-                <SelectItem key={tournament.id} value={tournament.id}>
-                  {tournament.name} ({tournament.game})
-                </SelectItem>
-              ))}
+            <SelectContent className="bg-gray-800 border-gray-700 text-white z-50 max-h-80">
+              {tournaments.length === 0 ? (
+                <div className="p-3 text-sm text-gray-400 text-center">No tournaments found</div>
+              ) : (
+                tournaments.map(tournament => (
+                  <SelectItem key={tournament.id} value={tournament.id} className="text-white hover:bg-gray-700 cursor-pointer">
+                    {tournament.name} ({tournament.game})
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
           
@@ -1345,32 +1311,6 @@ const TournamentRegistrationsAdmin = () => {
                   />
                 </div>
               </div>
-
-              {/* Orphaned Registrations Warning Banner */}
-              {orphanedRegistrations.length > 0 && (
-                <div className="bg-amber-950/40 border border-amber-500/50 p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 text-amber-300 text-xs sm:text-sm">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>
-                      Found <strong>{orphanedRegistrations.length}</strong> orphaned registration(s) from previously deleted teams.
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleCleanupOrphanedRegistrations}
-                    disabled={cleaningOrphaned}
-                    className="border-amber-500/50 text-amber-300 hover:bg-amber-500/20 text-xs h-7 shrink-0"
-                  >
-                    {cleaningOrphaned ? (
-                      <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-3.5 h-3.5 mr-1" />
-                    )}
-                    Clean Up Orphaned Records
-                  </Button>
-                </div>
-              )}
 
               {/* Quick Filter Tabs & Dropdown */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">

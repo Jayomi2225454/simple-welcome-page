@@ -76,27 +76,3 @@ CREATE TRIGGER trg_sync_team_status_to_registrations
 AFTER UPDATE OF status ON public.tournament_teams
 FOR EACH ROW
 EXECUTE FUNCTION public.sync_team_status_to_registrations();
-
-
--- 3. One-time cleanup query: Remove orphaned registrations from team tournaments where the team was already deleted
-DELETE FROM public.tournament_registrations r
-WHERE EXISTS (
-  SELECT 1 FROM public.tournaments t 
-  WHERE t.id = r.tournament_id 
-    AND (
-      CASE 
-        WHEN t.team_size::text ~ '^[0-9]+$' THEN (t.team_size::text)::int > 1
-        ELSE FALSE
-      END
-      OR t.team_mode IN ('duo', 'squad', '5-man')
-    )
-)
-AND NOT EXISTS (
-  SELECT 1 FROM public.tournament_team_members tm
-  JOIN public.tournament_teams tt ON tt.id = tm.team_id
-  WHERE tm.user_id = r.user_id AND tt.tournament_id = r.tournament_id
-)
-AND NOT EXISTS (
-  SELECT 1 FROM public.tournament_teams tt
-  WHERE tt.captain_user_id = r.user_id AND tt.tournament_id = r.tournament_id
-);
