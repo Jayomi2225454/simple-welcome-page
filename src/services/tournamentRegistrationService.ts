@@ -65,12 +65,14 @@ export const tournamentRegistrationService = {
       throw new Error(`Registration Full / Closed: This tournament has reached its maximum limit of ${maxParticipants} participants.`);
     }
 
-    // Get live registered count from tournament_registrations (excluding rejected payments)
+    // Get live registered count from tournament_registrations (excluding rejected, cancelled, and removed registrations)
     const { count } = await supabase
       .from('tournament_registrations')
       .select('*', { count: 'exact', head: true })
       .eq('tournament_id', tournamentId)
-      .neq('payment_status', 'rejected');
+      .neq('payment_status', 'rejected')
+      .neq('status', 'cancelled')
+      .neq('status', 'removed');
 
     const liveCount = Math.max(tourney.current_participants || 0, count || 0);
 
@@ -86,7 +88,7 @@ export const tournamentRegistrationService = {
   },
 
   /**
-   * After a successful registration, updates tournament participant count and auto-locks status if cap reached.
+   * After a successful registration or team removal, updates tournament participant count and auto-locks/unlocks status.
    */
   async syncTournamentParticipantCount(tournamentId: string): Promise<void> {
     try {
@@ -102,18 +104,21 @@ export const tournamentRegistrationService = {
         .from('tournament_registrations')
         .select('*', { count: 'exact', head: true })
         .eq('tournament_id', tournamentId)
-        .neq('payment_status', 'rejected');
+        .neq('payment_status', 'rejected')
+        .neq('status', 'cancelled')
+        .neq('status', 'removed');
 
       const newCount = count || 0;
       const maxParticipants = tourney.max_participants;
       const isCapEnforced = isNewTournamentWithCap(tourney);
       const shouldClose = isCapEnforced && maxParticipants && maxParticipants > 0 && newCount >= maxParticipants;
+      const shouldReopen = isCapEnforced && maxParticipants && maxParticipants > 0 && newCount < maxParticipants && tourney.status === 'closed';
 
       await supabase
         .from('tournaments')
         .update({
           current_participants: newCount,
-          ...(shouldClose ? { status: 'closed' } : {})
+          ...(shouldClose ? { status: 'closed' } : shouldReopen ? { status: 'upcoming' } : {})
         })
         .eq('id', tournamentId);
     } catch (syncErr) {

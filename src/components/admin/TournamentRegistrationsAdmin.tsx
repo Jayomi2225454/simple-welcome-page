@@ -7,9 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Check, X, Users, Settings2, Image, ExternalLink, Loader2, MessageSquare, Edit, Save, Crown, UserMinus, UserCheck, ShieldAlert, AlertTriangle, RefreshCw, Trash2, Shield, Info, Copy, UserX, Search, Key, Globe, Clock, AlertCircle } from 'lucide-react';
+import { Check, X, Users, Settings2, Image, ExternalLink, Loader2, MessageSquare, Edit, Save, Crown, UserMinus, UserCheck, ShieldAlert, AlertTriangle, RefreshCw, Trash2, Shield, Info, Copy, UserX, Search, Key, Globe, Clock, AlertCircle, Ban } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { tournamentRegistrationService } from '@/services/tournamentRegistrationService';
 import TournamentCustomFieldsAdmin from './TournamentCustomFieldsAdmin';
 
 interface Registration {
@@ -71,6 +72,7 @@ interface AdminTeam {
   created_at: string;
   team_code?: string | null;
   password?: string | null;
+  payment_mode?: string | null;
   captain?: {
     user_id: string;
     name: string;
@@ -81,7 +83,7 @@ interface AdminTeam {
   members: AdminTeamMember[];
 }
 
-export type PaymentCategory = 'all' | 'pending_verification' | 'partially_paid' | 'fully_paid' | 'rejected';
+export type PaymentCategory = 'all' | 'pending_verification' | 'partially_paid' | 'fully_paid' | 'rejected' | 'cancelled';
 
 const TournamentRegistrationsAdmin = () => {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -102,7 +104,7 @@ const TournamentRegistrationsAdmin = () => {
   const [teams, setTeams] = useState<AdminTeam[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(false);
   const [teamSearchQuery, setTeamSearchQuery] = useState('');
-  const [teamStatusFilter, setTeamStatusFilter] = useState<'all' | 'full' | 'recruiting'>('all');
+  const [teamStatusFilter, setTeamStatusFilter] = useState<'all' | 'full' | 'recruiting' | 'disabled'>('all');
 
   // Dialog states for team administration
   const [changeCaptainDialog, setChangeCaptainDialog] = useState<AdminTeam | null>(null);
@@ -118,6 +120,11 @@ const TournamentRegistrationsAdmin = () => {
 
   const [disbandTeamDialog, setDisbandTeamDialog] = useState<AdminTeam | null>(null);
   const [processingDisband, setProcessingDisband] = useState(false);
+
+  // Disable / Enable team state
+  const [toggleTeamStatusDialog, setToggleTeamStatusDialog] = useState<{ team: AdminTeam; targetStatus: 'disabled' | 'active' } | null>(null);
+  const [processingTeamStatus, setProcessingTeamStatus] = useState(false);
+  const [cleaningOrphaned, setCleaningOrphaned] = useState(false);
   
   // Reject dialog state
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -839,6 +846,7 @@ const TournamentRegistrationsAdmin = () => {
       });
 
       setRemoveMemberData(null);
+      await tournamentRegistrationService.syncTournamentParticipantCount(team.tournament_id);
       loadTeams();
       loadRegistrations();
     } catch (error: any) {
@@ -857,20 +865,70 @@ const TournamentRegistrationsAdmin = () => {
     setProcessingDisband(true);
     try {
       const teamId = disbandTeamDialog.id;
+      const tournamentId = disbandTeamDialog.tournament_id;
 
+      // Collect all member user IDs including the captain
+      const userIdsSet = new Set<string>();
+      if (disbandTeamDialog.captain_user_id) {
+        userIdsSet.add(disbandTeamDialog.captain_user_id);
+      }
+      (disbandTeamDialog.members || []).forEach(m => {
+        if (m.user_id) userIdsSet.add(m.user_id);
+      });
+
+      // Also query tournament_team_members from DB to ensure nothing is missed
+      const { data: dbMembers } = await supabase
+        .from('tournament_team_members')
+        .select('user_id')
+        .eq('team_id', teamId);
+
+      if (dbMembers) {
+        dbMembers.forEach(m => {
+          if (m.user_id) userIdsSet.add(m.user_id);
+        });
+      }
+
+      const userIds = Array.from(userIdsSet);
+
+      // 1. Cascade Delete linked entries from tournament_registrations
+      if (userIds.length > 0) {
+        const { error: regDelErr } = await supabase
+          .from('tournament_registrations')
+          .delete()
+          .eq('tournament_id', tournamentId)
+          .in('user_id', userIds);
+
+        if (regDelErr) {
+          console.error("Error deleting linked registrations:", regDelErr);
+        }
+      }
+
+      // 2. Delete player points for this team
+      await supabase
+        .from('tournament_player_points')
+        .delete()
+        .eq('team_id', teamId);
+
+      // 3. Delete team members
       await supabase
         .from('tournament_team_members')
         .delete()
         .eq('team_id', teamId);
 
-      await supabase
+      // 4. Delete the team record itself
+      const { error: teamDelErr } = await supabase
         .from('tournament_teams')
         .delete()
         .eq('id', teamId);
 
+      if (teamDelErr) throw teamDelErr;
+
+      // 5. Recalculate live tournament participant count
+      await tournamentRegistrationService.syncTournamentParticipantCount(tournamentId);
+
       toast({
-        title: "Team Disbanded",
-        description: `Team "${disbandTeamDialog.team_name}" has been deleted.`
+        title: "Team Deleted & Registrations Removed",
+        description: `Team "${disbandTeamDialog.team_name}" and its ${userIds.length} linked registration(s) have been deleted.`
       });
 
       setDisbandTeamDialog(null);
@@ -887,6 +945,132 @@ const TournamentRegistrationsAdmin = () => {
     }
   };
 
+  const handleConfirmToggleTeamStatus = async () => {
+    if (!toggleTeamStatusDialog) return;
+    setProcessingTeamStatus(true);
+    try {
+      const { team, targetStatus } = toggleTeamStatusDialog;
+      const tournamentId = team.tournament_id;
+
+      // Collect all member user IDs including the captain
+      const userIdsSet = new Set<string>();
+      if (team.captain_user_id) userIdsSet.add(team.captain_user_id);
+      (team.members || []).forEach(m => {
+        if (m.user_id) userIdsSet.add(m.user_id);
+      });
+
+      const { data: dbMembers } = await supabase
+        .from('tournament_team_members')
+        .select('user_id')
+        .eq('team_id', team.id);
+
+      if (dbMembers) {
+        dbMembers.forEach(m => {
+          if (m.user_id) userIdsSet.add(m.user_id);
+        });
+      }
+
+      const userIds = Array.from(userIdsSet);
+
+      // 1. Update team status
+      const { error: teamErr } = await supabase
+        .from('tournament_teams')
+        .update({ status: targetStatus })
+        .eq('id', team.id);
+
+      if (teamErr) throw teamErr;
+
+      // 2. Automatically update linked tournament_registrations status
+      if (userIds.length > 0) {
+        const regNewStatus = targetStatus === 'disabled' ? 'cancelled' : 'confirmed';
+        const { error: regErr } = await supabase
+          .from('tournament_registrations')
+          .update({ status: regNewStatus })
+          .eq('tournament_id', tournamentId)
+          .in('user_id', userIds);
+
+        if (regErr) {
+          console.error("Error updating registrations status:", regErr);
+        }
+      }
+
+      // 3. Recalculate participant count
+      await tournamentRegistrationService.syncTournamentParticipantCount(tournamentId);
+
+      toast({
+        title: targetStatus === 'disabled' ? "Team Disabled" : "Team Reactivated",
+        description: targetStatus === 'disabled'
+          ? `Team "${team.team_name}" is disabled. Its ${userIds.length} registration(s) have been marked as Cancelled.`
+          : `Team "${team.team_name}" is reactivated and registrations restored.`
+      });
+
+      setToggleTeamStatusDialog(null);
+      loadTeams();
+      loadRegistrations();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update team status",
+        variant: "destructive"
+      });
+    } finally {
+      setProcessingTeamStatus(false);
+    }
+  };
+
+  // Find orphaned registrations in team tournament where the team no longer exists
+  const orphanedRegistrations = useMemo(() => {
+    const currentTourn = tournaments.find(t => t.id === selectedTournament);
+    const isTeamTourn = (Number(currentTourn?.team_size) || 1) > 1;
+    if (!isTeamTourn) return [];
+    
+    return registrations.filter(r => !userTeamMap[r.user_id]);
+  }, [registrations, userTeamMap, tournaments, selectedTournament]);
+
+  const handleCleanupOrphanedRegistrations = async () => {
+    if (orphanedRegistrations.length === 0 || !selectedTournament) return;
+    setCleaningOrphaned(true);
+    try {
+      const orphanedIds = orphanedRegistrations.map(r => r.id);
+      const { error } = await supabase
+        .from('tournament_registrations')
+        .delete()
+        .in('id', orphanedIds);
+
+      if (error) throw error;
+
+      await tournamentRegistrationService.syncTournamentParticipantCount(selectedTournament);
+
+      toast({
+        title: "Orphaned Registrations Cleaned",
+        description: `Successfully removed ${orphanedIds.length} orphaned registration(s) with no active team.`
+      });
+
+      loadRegistrations();
+      loadTeams();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to clean orphaned registrations",
+        variant: "destructive"
+      });
+    } finally {
+      setCleaningOrphaned(false);
+    }
+  };
+
+  // Check if a registration is active (not cancelled, not removed, and not part of a disabled team)
+  const isRegistrationActive = (reg: Registration): boolean => {
+    const regStatus = (reg.status || '').toLowerCase();
+    if (regStatus === 'cancelled' || regStatus === 'removed') return false;
+
+    const userTeam = userTeamMap[reg.user_id];
+    if (userTeam && (userTeam.status === 'disabled' || userTeam.status === 'inactive')) {
+      return false;
+    }
+    return true;
+  };
+
   const selectedTournamentData = tournaments.find(t => t.id === selectedTournament);
 
   const copyToClipboard = (text: string, label: string) => {
@@ -901,7 +1085,7 @@ const TournamentRegistrationsAdmin = () => {
     const matchesSearch = 
       !teamSearchQuery ||
       team.team_name.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
-      team.team_code.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
+      (team.team_code && team.team_code.toLowerCase().includes(teamSearchQuery.toLowerCase())) ||
       team.members.some(m => 
         (m.profile?.in_game_name && m.profile.in_game_name.toLowerCase().includes(teamSearchQuery.toLowerCase())) ||
         (m.profile?.display_name && m.profile.display_name.toLowerCase().includes(teamSearchQuery.toLowerCase())) ||
@@ -911,8 +1095,10 @@ const TournamentRegistrationsAdmin = () => {
 
     const matchesStatus = 
       teamStatusFilter === 'all' ? true :
-      teamStatusFilter === 'full' ? team.is_full :
-      !team.is_full;
+      teamStatusFilter === 'full' ? team.is_full && team.status !== 'disabled' :
+      teamStatusFilter === 'recruiting' ? !team.is_full && team.status !== 'disabled' :
+      teamStatusFilter === 'disabled' ? team.status === 'disabled' :
+      true;
 
     return matchesSearch && matchesStatus;
   });
@@ -923,8 +1109,13 @@ const TournamentRegistrationsAdmin = () => {
     let partially_paid = 0;
     let fully_paid = 0;
     let rejected = 0;
+    let cancelled = 0;
 
     registrations.forEach(r => {
+      if (!isRegistrationActive(r)) {
+        cancelled++;
+        return;
+      }
       const cat = getRegistrationPaymentCategory(r);
       if (cat === 'pending_verification') pending_verification++;
       else if (cat === 'partially_paid') partially_paid++;
@@ -932,21 +1123,34 @@ const TournamentRegistrationsAdmin = () => {
       else if (cat === 'rejected') rejected++;
     });
 
+    const activeCount = registrations.filter(isRegistrationActive).length;
+
     return {
-      all: registrations.length,
+      all: activeCount,
       pending_verification,
       partially_paid,
       fully_paid,
-      rejected
+      rejected,
+      cancelled,
+      total: registrations.length
     };
   }, [registrations, userTeamMap, tournaments, selectedTournament]);
 
-  // Filter registrations by payment category and search text
+  // Filter registrations by payment category and search text (filtering out disabled/cancelled from active views)
   const filteredRegistrations = useMemo(() => {
     return registrations.filter(reg => {
-      if (paymentFilter !== 'all') {
-        const cat = getRegistrationPaymentCategory(reg);
-        if (cat !== paymentFilter) return false;
+      const active = isRegistrationActive(reg);
+
+      if (paymentFilter === 'cancelled') {
+        if (active) return false;
+      } else {
+        // Active tabs filter out disabled teams and cancelled registrations
+        if (!active) return false;
+
+        if (paymentFilter !== 'all') {
+          const cat = getRegistrationPaymentCategory(reg);
+          if (cat !== paymentFilter) return false;
+        }
       }
 
       if (registrationSearchQuery.trim()) {
@@ -1142,6 +1346,32 @@ const TournamentRegistrationsAdmin = () => {
                 </div>
               </div>
 
+              {/* Orphaned Registrations Warning Banner */}
+              {orphanedRegistrations.length > 0 && (
+                <div className="bg-amber-950/40 border border-amber-500/50 p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-amber-300 text-xs sm:text-sm">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>
+                      Found <strong>{orphanedRegistrations.length}</strong> orphaned registration(s) from previously deleted teams.
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCleanupOrphanedRegistrations}
+                    disabled={cleaningOrphaned}
+                    className="border-amber-500/50 text-amber-300 hover:bg-amber-500/20 text-xs h-7 shrink-0"
+                  >
+                    {cleaningOrphaned ? (
+                      <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    )}
+                    Clean Up Orphaned Records
+                  </Button>
+                </div>
+              )}
+
               {/* Quick Filter Tabs & Dropdown */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
                 {/* Desktop & Tablet Tabs */}
@@ -1234,6 +1464,26 @@ const TournamentRegistrationsAdmin = () => {
                       {counts.rejected}
                     </span>
                   </button>
+
+                  {counts.cancelled > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentFilter('cancelled')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                        paymentFilter === 'cancelled'
+                          ? 'bg-gray-600 text-white shadow-md'
+                          : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                      }`}
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                      <span>Cancelled / Disabled</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                        paymentFilter === 'cancelled' ? 'bg-black/30 text-white' : 'bg-gray-700 text-gray-300'
+                      }`}>
+                        {counts.cancelled}
+                      </span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Mobile Dropdown */}
@@ -1248,6 +1498,9 @@ const TournamentRegistrationsAdmin = () => {
                       <SelectItem value="partially_paid">Partially Paid ({counts.partially_paid})</SelectItem>
                       <SelectItem value="fully_paid">Fully Paid ({counts.fully_paid})</SelectItem>
                       <SelectItem value="rejected">Rejected ({counts.rejected})</SelectItem>
+                      {counts.cancelled > 0 && (
+                        <SelectItem value="cancelled">Cancelled / Disabled ({counts.cancelled})</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1269,7 +1522,8 @@ const TournamentRegistrationsAdmin = () => {
                           paymentFilter === 'pending_verification' ? 'Pending Verification' :
                           paymentFilter === 'partially_paid' ? 'Partially Paid' :
                           paymentFilter === 'fully_paid' ? 'Fully Paid' :
-                          paymentFilter === 'rejected' ? 'Rejected' : 'selected filters'
+                          paymentFilter === 'rejected' ? 'Rejected' :
+                          paymentFilter === 'cancelled' ? 'Cancelled / Disabled' : 'selected filters'
                         }`
                     }
                   </p>
@@ -1606,6 +1860,7 @@ const TournamentRegistrationsAdmin = () => {
                       <SelectItem value="all">All Teams</SelectItem>
                       <SelectItem value="full">Full Teams</SelectItem>
                       <SelectItem value="recruiting">Recruiting</SelectItem>
+                      <SelectItem value="disabled">Disabled</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1643,6 +1898,17 @@ const TournamentRegistrationsAdmin = () => {
                             <h3 className="text-lg font-bold text-white flex items-center gap-2">
                               {team.team_name}
                             </h3>
+                            {team.status === 'disabled' ? (
+                              <Badge className="bg-gray-700 text-gray-300 border border-gray-600 text-xs flex items-center gap-1">
+                                <Ban className="w-3 h-3 text-red-400" />
+                                Disabled
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-emerald-950/60 text-emerald-400 border border-emerald-500/40 text-xs flex items-center gap-1">
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                Active
+                              </Badge>
+                            )}
                             {(() => {
                               const code = team.team_code || team.id.substring(0, 8).toUpperCase();
                               return (
@@ -1680,6 +1946,29 @@ const TournamentRegistrationsAdmin = () => {
 
                           {/* Top Team Actions */}
                           <div className="flex items-center gap-2 flex-wrap">
+                            {team.status === 'disabled' ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setToggleTeamStatusDialog({ team, targetStatus: 'active' })}
+                                className="border-green-500/40 text-green-300 hover:bg-green-500/10 text-xs h-8"
+                                title="Enable and activate team"
+                              >
+                                <Check className="w-3.5 h-3.5 mr-1.5 text-green-400" />
+                                Enable Team
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setToggleTeamStatusDialog({ team, targetStatus: 'disabled' })}
+                                className="border-gray-600 text-gray-300 hover:bg-gray-800 text-xs h-8"
+                                title="Disable team (soft delete)"
+                              >
+                                <Ban className="w-3.5 h-3.5 mr-1.5 text-gray-400" />
+                                Disable Team
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"
@@ -2362,7 +2651,7 @@ const TournamentRegistrationsAdmin = () => {
                   <span>Warning: Destructive Action</span>
                 </div>
                 <p className="text-xs text-gray-300 leading-relaxed">
-                  This will completely remove team <strong>{disbandTeamDialog.team_name}</strong> (Code: {disbandTeamDialog.team_code || disbandTeamDialog.id.substring(0, 8).toUpperCase()}) and remove its {disbandTeamDialog.members.length} member(s) from this team.
+                  This will completely remove team <strong>{disbandTeamDialog.team_name}</strong> (Code: {disbandTeamDialog.team_code || disbandTeamDialog.id.substring(0, 8).toUpperCase()}) and cascade delete all {disbandTeamDialog.members.length} member registration(s) from the tournament registrations list, freeing up the tournament participant slots.
                 </p>
               </div>
             </div>
@@ -2388,6 +2677,76 @@ const TournamentRegistrationsAdmin = () => {
                 <Trash2 className="w-4 h-4 mr-1.5" />
               )}
               Disband &amp; Delete Team
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Admin: Disable / Enable Team Dialog */}
+      <Dialog open={!!toggleTeamStatusDialog} onOpenChange={(open) => { if (!open) setToggleTeamStatusDialog(null); }}>
+        <DialogContent className="bg-gray-900 border border-gray-700 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className={`flex items-center gap-2 ${toggleTeamStatusDialog?.targetStatus === 'disabled' ? 'text-amber-400' : 'text-green-400'}`}>
+              {toggleTeamStatusDialog?.targetStatus === 'disabled' ? <Ban className="w-5 h-5" /> : <Check className="w-5 h-5" />}
+              {toggleTeamStatusDialog?.targetStatus === 'disabled' ? 'Disable Team' : 'Enable Team'}
+            </DialogTitle>
+            <DialogDescription className="text-gray-400 text-sm">
+              {toggleTeamStatusDialog?.targetStatus === 'disabled'
+                ? `Deactivate team "${toggleTeamStatusDialog?.team.team_name}" without permanently deleting it.`
+                : `Re-activate team "${toggleTeamStatusDialog?.team.team_name}".`
+              }
+            </DialogDescription>
+          </DialogHeader>
+
+          {toggleTeamStatusDialog && (
+            <div className="space-y-3 py-2">
+              <div className={`p-4 rounded-lg space-y-2 border ${
+                toggleTeamStatusDialog.targetStatus === 'disabled'
+                  ? 'bg-amber-950/30 border-amber-500/40'
+                  : 'bg-green-950/30 border-green-500/40'
+              }`}>
+                <div className="flex items-center gap-2 font-semibold text-sm text-white">
+                  {toggleTeamStatusDialog.targetStatus === 'disabled' ? (
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  ) : (
+                    <Check className="w-4 h-4 text-green-400 shrink-0" />
+                  )}
+                  <span>
+                    {toggleTeamStatusDialog.targetStatus === 'disabled' ? 'Soft Delete / Deactivate' : 'Restore Active Status'}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-300 leading-relaxed">
+                  {toggleTeamStatusDialog.targetStatus === 'disabled'
+                    ? `Disabling this team will mark all ${toggleTeamStatusDialog.team.members.length} team members' registrations as 'cancelled' and hide them from active registration lists. You can re-enable this team at any time.`
+                    : `Re-enabling this team will restore all ${toggleTeamStatusDialog.team.members.length} team members' registrations as 'confirmed' and include them in active tournament lists.`
+                  }
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setToggleTeamStatusDialog(null)}
+              className="border-gray-700 text-gray-300"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={toggleTeamStatusDialog?.targetStatus === 'disabled' ? 'destructive' : 'default'}
+              onClick={handleConfirmToggleTeamStatus}
+              disabled={processingTeamStatus}
+              className={toggleTeamStatusDialog?.targetStatus === 'disabled' ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}
+            >
+              {processingTeamStatus ? (
+                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              ) : toggleTeamStatusDialog?.targetStatus === 'disabled' ? (
+                <Ban className="w-4 h-4 mr-1.5" />
+              ) : (
+                <Check className="w-4 h-4 mr-1.5" />
+              )}
+              {toggleTeamStatusDialog?.targetStatus === 'disabled' ? 'Confirm Disable Team' : 'Confirm Enable Team'}
             </Button>
           </DialogFooter>
         </DialogContent>
